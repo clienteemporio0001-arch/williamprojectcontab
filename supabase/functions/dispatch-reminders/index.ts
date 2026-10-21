@@ -140,7 +140,15 @@ Deno.serve(async(req:Request)=>{
       if(!client?.active||!client.opt_in||!client.opt_in_at||item.amount===null){stats.skipped++;continue;}
       const offset=dayDiff(item.due_date,local.date);
       if(!(item.reminder_offsets||[7,3,1,0]).includes(offset))continue;
-      if(dryRun){ stats.wouldSend++; continue; }
+      if(dryRun) {
+        const {data:existing,error:checkError}=await db.from('reminder_logs')
+          .select('id').eq('org_id',org.id).eq('obligation_id',item.id)
+          .eq('due_date',item.due_date).eq('offset_days',offset).maybeSingle();
+        if(checkError){stats.failed++;continue;}
+        if(existing)stats.skipped++;
+        else stats.wouldSend++;
+        continue;
+      }
 
       // Unique constraint registra a tentativa ANTES de enviar, impedindo duplicidade.
       const {data:log,error:logError}=await db.from('reminder_logs').insert({
