@@ -21,6 +21,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+      - run: node --experimental-strip-types scripts/smoke-pdf.mjs
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
