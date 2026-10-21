@@ -25,7 +25,7 @@ Deno.serve(async(req:Request)=>{
     .select('id,org_id,title,amount,due_date,status,clients!inner(name,company,tax_id),organizations!inner(name,tax_id,pix_key,billing_contact)')
     .eq('id',obligation_id).single();
   if(fetchError||!obligation)return respond('Cobrança não encontrada ou sem permissão',404);
-  if(obligation.status==='cancelled')return respond('Cobrança cancelada',409);
+  if(obligation.status!=='pending')return respond('Apenas cobranças pendentes podem gerar aviso pré-pagamento',409);
   if(obligation.amount===null||Number(obligation.amount)<0)return respond('Informe o valor dos honorários',422);
   const client=obligation.clients as unknown as {name:string;company:string;tax_id:string|null};
   const office=obligation.organizations as unknown as {name:string;tax_id:string;pix_key:string;billing_contact:string};
