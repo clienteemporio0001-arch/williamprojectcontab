@@ -14,3 +14,18 @@
 @media(max-width:610px){.main-content{padding:24px 15px 45px}.topbar{height:65px;padding:0 15px}.today-pill{display:none}.crumb{gap:7px;font-size:11px}.page-header{align-items:flex-start;flex-direction:column;gap:16px}.page-header h1{font-size:25px}.page-header>.btn{width:100%}.metric-grid{gap:10px}.metric-card{padding:16px;min-height:136px}.metric-head{font-size:10px}.metric-head svg{width:16px}.metric-card>strong{font-size:26px}.metric-foot{font-size:9px}.panel-heading{padding:20px 17px}.schedule-list{padding:3px 17px}.schedule-row{gap:9px}.schedule-date{min-width:75px}.schedule-date strong{font-size:10px}.bottom-stats{align-items:flex-start;flex-direction:column;gap:17px}.table-toolbar{padding:13px;flex-direction:column;align-items:stretch}.searchbox{min-width:0;max-width:none}.modal-overlay{padding:10px}.modal-head,.modal-body{padding:20px}.form-row{grid-template-columns:1fr}.auth-card{padding:25px}.demo-banner{align-items:flex-start}.demo-tag{display:none}}
 
 .offset-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.offset-item{display:flex;flex-direction:row;align-items:center;gap:8px;padding:10px;border:1px solid #33475b;border-radius:9px;font-size:11px;font-weight:600;background:#112437}.offset-item input{width:16px;height:16px;accent-color:#44dbb4}@media(max-width:610px){.offset-grid{grid-template-columns:1fr 1fr}}
+
+/* Cadastro profissional de contadores */
+.auth-card.auth-card-signup{width:min(660px,100%);padding:32px 36px;max-height:calc(100vh - 32px);overflow-y:auto}
+.auth-card.auth-card-signup .brand{margin-bottom:24px}
+.auth-card.auth-card-signup .subtle{margin-bottom:22px}
+.auth-card.auth-card-signup .gap-lg{gap:14px}
+.register-section{font-size:10px;font-weight:800;letter-spacing:1.6px;color:#54debb;border-bottom:1px solid #2a4150;padding:4px 0 9px}
+.register-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:13px}
+.register-grid>label{min-width:0}
+.register-grid input{width:100%}
+.register-optional{font-size:10px;color:#839cb4;font-weight:500}
+.register-help{font-size:10.5px;color:#91abc0;line-height:1.65;margin:0}
+.auth-notice{display:flex;align-items:flex-start;gap:10px;color:#acebd4;font-size:11px;line-height:1.7;background:#194238;border:1px solid #398366;padding:12px 14px;border-radius:9px}
+.auth-notice svg{flex-shrink:0;margin-top:2px}
+@media(max-width:560px){.auth-card.auth-card-signup{padding:21px 18px;max-height:none}.register-grid{grid-template-columns:1fr}.register-section{margin-top:3px}}
