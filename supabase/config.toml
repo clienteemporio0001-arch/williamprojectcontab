@@ -1,0 +1,2 @@
+[functions.dispatch-reminders]
+verify_jwt = false
