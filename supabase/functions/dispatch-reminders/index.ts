@@ -79,12 +79,16 @@ Deno.serve(async(req:Request)=>{
   const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if(!url||!key)return fail('Banco não configurado');
   const db=createClient(url,key,{auth:{persistSession:false}});
+  // A simulação autenticada permite conferir quais cobranças seriam enviadas
+  // sem contato com a Meta, gravação de logs ou geração de novas competências.
+  let dryRun=false;
+  try { dryRun=(await req.json())?.dry_run===true; } catch { /* sem corpo = execução normal */ }
   const token=Deno.env.get('WHATSAPP_TOKEN');
   const phoneId=Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
-  if(!token||!phoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME'))
+  if(!dryRun&&(!token||!phoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME')))
     return fail('Configure os segredos do WhatsApp e um template de utilidade aprovado',503);
 
-  const stats={organizations:0,generated:0,sent:0,failed:0,skipped:0};
+  const stats={dryRun,organizations:0,generated:0,wouldSend:0,sent:0,failed:0,skipped:0};
   const {data:orgs,error:orgError}=await db.from('organizations')
     .select('id,name,timezone,tax_id,pix_key,billing_contact').limit(200);
   if(orgError)return fail(orgError.message);
@@ -94,7 +98,7 @@ Deno.serve(async(req:Request)=>{
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
     // Agendamento: uma vez por dia, entre 9h e 10h da manhã de cada escritório.
-    if(local.hour!==9)continue;
+    if(local.hour!==9&&!dryRun)continue;
     stats.organizations++;
 
     // Gera a competência do mês corrente em séries recorrentes (idempotente).
@@ -107,6 +111,7 @@ Deno.serve(async(req:Request)=>{
       if(item.series_id && !latest.has(item.series_id))latest.set(item.series_id,item);
     }
     for(const item of latest.values()){
+      if(dryRun)break;
       if(item.due_date.slice(0,7)>local.date.slice(0,7))continue;
       const newDue=nextMonthDue(local.date,item.due_day||20);
       const {error:e}=await db.from('obligations').insert({
@@ -135,6 +140,7 @@ Deno.serve(async(req:Request)=>{
       if(!client?.active||!client.opt_in||!client.opt_in_at||item.amount===null){stats.skipped++;continue;}
       const offset=dayDiff(item.due_date,local.date);
       if(!(item.reminder_offsets||[7,3,1,0]).includes(offset))continue;
+      if(dryRun){ stats.wouldSend++; continue; }
 
       // Unique constraint registra a tentativa ANTES de enviar, impedindo duplicidade.
       const {data:log,error:logError}=await db.from('reminder_logs').insert({
