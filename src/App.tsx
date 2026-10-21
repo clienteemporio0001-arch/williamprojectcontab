@@ -225,6 +225,7 @@ export default function App() {
     const client=clients.find(c=>c.id===item.client_id);
     if(!client) {setError('Cliente não encontrado.');return;}
     if(!client.opt_in){setError('O cliente precisa autorizar o recebimento de mensagens antes do envio.');return;}
+    if(demo && client.id.startsWith('demo-')){setError('Contato fictício: cadastre um cliente real e autorizado para abrir o WhatsApp.');return;}
     const text=renderMessage(messageTemplate,client,item);
     window.open('https://wa.me/'+phoneDigits(client.phone)+'?text='+encodeURIComponent(text),'_blank','noopener,noreferrer');
   }
