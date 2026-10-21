@@ -200,19 +200,19 @@ export default function App() {
   async function submitAuth(e:FormEvent) {
     e.preventDefault();if(!supabase)return;
     setSaving(true);setError('');
-    const {error:e}=authMode==='login'?
+    const {error:authError}=authMode==='login'?
       await supabase.auth.signInWithPassword({email:authEmail,password:authPassword}):
       await supabase.auth.signUp({email:authEmail,password:authPassword});
     setSaving(false);
-    if(e)setError(e.message);
+    if(authError)setError(authError.message);
     else if(authMode==='signup')notify('Cadastro recebido. Confirme seu e-mail, se solicitado, e entre na plataforma.');
   }
   async function makeWorkspace(e:FormEvent) {
     e.preventDefault();if(!supabase)return;
     setSaving(true);
-    const {error:e}=await supabase.rpc('create_workspace',{workspace_name:newWorkspace.trim()});
+    const {error:workspaceError}=await supabase.rpc('create_workspace',{workspace_name:newWorkspace.trim()});
     setSaving(false);
-    if(e){setError(e.message);return;}
+    if(workspaceError){setError(workspaceError.message);return;}
     if(session){
       const {data}=await supabase.from('organization_members').select('org_id').eq('user_id',session.user.id).limit(1).single();
       if(data){
@@ -274,7 +274,7 @@ export default function App() {
         <n.icon size={19} strokeWidth={1.9}/>{n.name}{page===n.id&&<span className="nav-active-dot"/>}</button>)}</nav>
       <div className="sidebar-footer"><div className="sidebar-note"><Sparkles size={16}/><strong>Mais tempo para seu escritório</strong><span>Automatize tarefas repetitivas e foque em seus clientes.</span></div>
         <div className="sidebar-profile"><span className="avatar">{orgLabel.slice(0,2).toUpperCase()}</span><span className="profile-text"><strong>{orgLabel}</strong><small>{demo?'Ambiente demonstrativo':'Espaço do escritório'}</small></span>
-          {supabase&&<button className="icon-button" title="Sair" onClick={()=>void supabase.auth.signOut()}><LogOut size={18}/></button>}
+          {supabase&&<button className="icon-button" title="Sair" onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={18}/></button>}
         </div></div>
     </aside>
     {menuOpen&&<button className="sidebar-backdrop" aria-label="Fechar navegação" onClick={()=>setMenuOpen(false)}/>}
