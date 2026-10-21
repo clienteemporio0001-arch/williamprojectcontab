@@ -1,102 +1,66 @@
-# ContabFlow — automação para escritórios contábeis
+# ContabFlow — SaaS de cobrança recorrente de honorários
 
-MVP SaaS para clientes, obrigações contábeis, vencimentos e lembretes personalizados pelo WhatsApp.
+O primeiro produto gera cobranças de honorários contábeis em PDFs personalizados (cliente, CPF/CNPJ, serviço, valor, vencimento e chave Pix) e programa seu envio pelo WhatsApp. Cada cliente possui seus próprios valores, prazos e dias de lembrete.
 
-## Implementado
+**IMPORTANTE:** o documento enviado pelo cliente no início do projeto era um RECIBO que confirmava pagamento. O ContabFlow agora gera AVISOS DE COBRANÇA ANTES DO PAGAMENTO, nunca recibos ou comprovantes de quitação. Pagamentos são confirmados manualmente neste MVP.
 
-- Dashboard: clientes, vencimentos dos próximos 7 dias, atrasados, valores e marcação manual de pagamento.
-- Cadastro de clientes com WhatsApp e registro da fonte da autorização para contato.
-- Obrigações com documento, valor, vencimento, link HTTPS opcional e recorrência mensal.
-- Mensagem de WhatsApp **manual** com variáveis do cliente e da obrigação.
-- Modo demonstração: dados fictícios salvos somente neste navegador (localStorage).
-- Supabase Auth + Postgres + RLS para separar os registros dos escritórios.
-- Edge Function para avisos a 7, 3 e 1 dias antes, no vencimento e 1 dia depois (configuração adicional obrigatória).
-- Geração de nova competência mensal pela Edge Function; nunca reaproveita link do documento anterior.
+## O que está implementado no código
 
-## Executar localmente
+- Dashboard, clientes, cobranças pendentes/pagas e recorrência mensal.
+- Consentimento para WhatsApp com registro da origem.
+- Dados do escritório: nome, CPF/CNPJ, Pix e contato de suporte.
+- Escolha dos dias de aviso para cada cobrança: 30, 15, 7, 5, 3, 1 dias antes, no dia, 1, 3 ou 7 dias depois.
+- Download do PDF de cobrança individual na interface (inclusive em modo de demonstração fictícia).
+- Geração do PDF pelo servidor em Storage privado em Supabase.
+- Rotina agendada que cria a próxima competência e envia o PDF como DOCUMENT no cabeçalho do template oficial WhatsApp, após configuração da integração.
+- Banco multi-escritório com RLS e histórico de tentativas de envio.
+
+## Testar a demonstração web
+
+https://clienteemporio0001-arch.github.io/williamprojectcontab/
+
+O site só contém uma interface demo com dados fictícios locais. Sem Supabase e integração Meta, **nenhuma mensagem é enviada automaticamente** e dados da demo não são mantidos na nuvem. Evite cadastrar dados reais na demo.
+
+## Rodar localmente
 
 ~~~bash
 npm install
 npm run dev
 ~~~
 
-Sem arquivo de variáveis de ambiente, a aplicação fica em **demonstração local**. Não use dados verdadeiros nesse modo.
+## Configurar produção (não realizado ainda)
 
-### Banco real: Supabase
-
-1. Crie um projeto Supabase e execute no SQL Editor a migração disponível em supabase/migrations/202610210001_init.sql.
-2. Habilite Supabase Auth por e-mail e configure as URLs de redirecionamento de seu domínio.
-3. Copie .env.example para .env.local e configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (chave pública).
-4. Execute npm run dev; autentique-se e crie o primeiro escritório.
-5. Não coloque SUPABASE_SERVICE_ROLE_KEY no frontend ou no GitHub.
-
-### WhatsApp automático: configuração necessária
-
-**Requisitos:** conta WhatsApp Business Platform da Meta; permissão explícita dos clientes, com opção de revogação; um modelo de utilidade aprovado pela Meta; credenciais e agendamento em um servidor.
-
-Template recomendado: nome lembrete_contabil, idioma pt_BR, corpo com **4 variáveis** nesta ordem: nome, documento, vencimento, valor.
-
-Exemplo para solicitar aprovação: "Olá {{1}}, informamos que o documento {{2}} tem vencimento em {{3}}, no valor de {{4}}. Caso já tenha pago, desconsidere este aviso. Em caso de dúvidas, responda a esta mensagem."
-
-Publique a função:
+1. Crie um projeto Supabase e execute no SQL Editor, nesta ordem:
+   - supabase/migrations/202610210001_init.sql
+   - supabase/migrations/202610210002_billing.sql
+2. Configure login por e-mail e VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY em arquivo .env.local.
+3. Publique as Edge Functions:
 
 ~~~bash
+supabase functions deploy generate-charge
 supabase functions deploy dispatch-reminders --no-verify-jwt
 ~~~
 
-Configure no painel Supabase os seguintes segredos da Edge Function:
-- SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (gerenciados pelo projeto);
-- CRON_SECRET (segredo aleatório forte);
-- WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID;
-- WHATSAPP_TEMPLATE_NAME=lembrete_contabil, WHATSAPP_TEMPLATE_LANG=pt_BR;
-- WHATSAPP_GRAPH_VERSION (opcional; informe uma versão suportada pela Meta).
+4. Configure secrets no Supabase, nunca no frontend: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TEMPLATE_NAME=cobranca_honorarios_pdf, WHATSAPP_TEMPLATE_LANG=pt_BR e WHATSAPP_GRAPH_VERSION (versão suportada).
+5. Aprove na Meta um template de utilidade com HEADER do tipo DOCUMENT/PDF e exatamente 4 campos BODY, nesta ordem: nome, descrição dos honorários, vencimento e valor. Exemplo para aprovação:
+   
+   "Olá {{1}}, segue em anexo o aviso de cobrança de {{2}}, com vencimento em {{3}}, no valor de {{4}}. Caso já tenha pago, desconsidere este aviso. Para dúvidas, responda esta mensagem."
+   
+   O template anterior de texto simples NÃO serve para este novo código, que envia cabeçalho com documento.
+6. Habilite pg_cron e pg_net no Supabase, crie um cron que invoque dispatch-reminders a cada hora, passando o segredo CRON_SECRET no cabeçalho x-cron-secret. A função só envia entre 9h e 10h locais do escritório.
+7. Teste com dados sintéticos e números autorizados antes de atender clientes. Observe regras de opt-in, LGPD e custos Meta.
 
-Habilite pg_cron e pg_net nas extensões do Supabase. No Supabase SQL Editor, adicione os segredos ao Vault (substitua os exemplos):
+## Limites e itens ainda não feitos
 
-~~~sql
-select vault.create_secret('https://SEU-PROJETO.supabase.co', 'contabflow_project_url');
-select vault.create_secret('SEU-SEGREDO-FORTE', 'contabflow_cron_secret');
-~~~
+- A integração piloto tem **um único remetente global** configurado no servidor. Para escalar em um SaaS comercial, será preciso configurar números de WhatsApp por escritório com armazenamento seguro de credenciais.
+- O status "enviado" representa aceitação da API da Meta, não confirmação de entrega, leitura ou quitação.
+- A API oficial da Meta não está conectada em produção, nem o agendamento Supabase implantado. Os arquivos no GitHub são código-fonte, não um serviço ativado.
+- Falhas são registradas e precisam de fila/reprocessamento controlado; ainda faltam webhook de entrega, cancelamento por descadastro e cobrança de assinatura.
+- Marcar como pago é manual; o sistema não lê extratos bancários ou confirma Pix.
+- Os PDFs de cada competência são gerados novamente, sem reutilizar documento de outro mês.
+- A função tem limite de 200 escritórios e 1000 cobranças por execução neste protótipo. Implementar paginação e escalabilidade antes da venda em massa.
 
-Programe a Edge Function uma vez por hora. Internamente, ela envia os avisos somente às 9h locais de cada escritório:
-
-~~~sql
-select cron.schedule(
-  'contabflow-lembretes',
-  '0 * * * *',
-  $$
-    select net.http_post(
-      url := (select decrypted_secret from vault.decrypted_secrets where name = 'contabflow_project_url') || '/functions/v1/dispatch-reminders',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'contabflow_cron_secret')
-      ),
-      body := '{}'::jsonb
-    );
-  $$
-);
-~~~
-
-Envios pela API oficial só ocorrem **após** esse procedimento, com telefone autorizado e template aprovado. O retorno "Aceito pela API" não prova entrega nem pagamento. A Meta pode cobrar por mensagens de template.
-
-## Testar a demonstração Web
-
-O workflow de GitHub Actions publica o frontend estático em GitHub Pages após push na main. Antes disso, habilite **Settings > Pages > Source: GitHub Actions** no repositório.
-
-URL esperada após deploy bem-sucedido: https://clienteemporio0001-arch.github.io/williamprojectcontab/
-
-GitHub Pages não hospeda o backend; dados de produção exigem Supabase e configuração segura.
-
-## Limites desta primeira versão
-
-- O banco já suporta múltiplos escritórios, mas a integração piloto da Meta usa **um remetente compartilhado**. Implementar números/credenciais por escritório antes de vender como SaaS.
-- O sistema não gera automaticamente guias fiscais nem altera PDFs de cobrança reais. Cada guia pode ter código, valor e dados próprios. Não reutilize documentos anteriores.
-- Use armazenamento privado e links assinados para PDFs; evite links fiscais públicos.
-- É necessário implementar assinaturas, webhook de entrega, fila com novas tentativas, configuração personalizada de régua e controles LGPD antes da produção ampla.
-- A função piloto processa até 200 escritórios e 1.000 obrigações por escritório por rodada; escalabilidade requer paginação e fila.
-- "Pago" é um status confirmado manualmente pelo contador; não significa integração com banco.
-
-## Referências
-
-- Política de mensagens: https://business.whatsapp.com/policy/preview?lang=pt_BR
-- Agendamentos Supabase: https://supabase.com/docs/guides/functions/schedule-functions
+## Documentação
+https://supabase.com/docs/guides/functions
+https://supabase.com/docs/guides/storage/serving/downloads
+https://business.whatsapp.com/policy
