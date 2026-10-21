@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from '../src/lib/registration.ts';
+assert.equal(validCNPJ('04.252.011/0001-10'),true);
+assert.equal(validCNPJ('00.000.000/0000-00'),false);
+assert.equal(validCNPJ('04.252.011/0001-11'),false);
+assert.equal(normalizeBrazilPhone('(68) 99999-9999'),'5568999999999');
+assert.equal(normalizeBrazilPhone('5568999999999'),'5568999999999');
+assert.equal(normalizeBrazilPhone('123'),null);
+assert.match(signupErrorMessage('For security purposes, you can only request this after 50 seconds.'),/50 segundos/);
+assert.match(signupErrorMessage('Email not confirmed'),/Confirme seu endereço/);
+console.log('OK: validação de cadastro e mensagens de segurança funcionando.');
