@@ -7,6 +7,7 @@ import {
   Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import MasterAdmin from './MasterAdmin';
 import {
   type Client, type Obligation, type ReminderLog, DEFAULT_TEMPLATE,
   demoClients, demoObligations, dateISO, daysUntil, money, formatDate,
@@ -65,6 +66,8 @@ export default function App() {
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
+  const [masterStatus,setMasterStatus] = useState<'checking'|'yes'|'no'>(supabase?'checking':'no');
+  const [masterView,setMasterView] = useState(true);
   const [loading,setLoading] = useState(false);
   const [authMode,setAuthMode] = useState<'login'|'signup'>('login');
   const [authEmail,setAuthEmail] = useState('');
@@ -95,6 +98,16 @@ export default function App() {
     const {data:{subscription}}=s.auth.onAuthStateChange((_event,next) => setSession(next));
     return () => subscription.unsubscribe();
   },[]);
+
+  useEffect(() => {
+    if(!supabase)return;
+    if(!session){setMasterStatus('no');setMasterView(true);return;}
+    let valid=true;setMasterStatus('checking');
+    void supabase.rpc('is_master_admin').then(({data,error:e})=>{
+      if(valid)setMasterStatus(!e&&data===true?'yes':'no');
+    });
+    return()=>{valid=false;};
+  },[session?.user.id]);
 
   useEffect(() => {
     if(!supabase) return;
@@ -298,6 +311,8 @@ export default function App() {
     </form>
     <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
   </div></div>;
+  if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
+  if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
   if(!demo&&!workspace)return <div className="auth-wrap"><div className="auth-card">
     <div className="brand"><span className="logo-mark"><Building2/></span><span>contab<span className="brand-accent">flow</span></span></div>
     <h1>Vamos criar seu escritório</h1><p className="subtle">Os dados ficarão separados dos demais escritórios da plataforma.</p>
@@ -312,7 +327,7 @@ export default function App() {
       <div className="nav-label">PLATAFORMA</div>
       <nav className="nav-list">{nav.map(n=><button key={n.id} className={'nav-item '+(page===n.id?'active':'')} onClick={()=>{setPage(n.id);setSearch('');setFilter('all');setMenuOpen(false);}}>
         <n.icon size={19} strokeWidth={1.9}/>{n.name}{page===n.id&&<span className="nav-active-dot"/>}</button>)}</nav>
-      <div className="sidebar-footer"><div className="sidebar-note"><Sparkles size={16}/><strong>Mais tempo para seu escritório</strong><span>Automatize tarefas repetitivas e foque em seus clientes.</span></div>
+      <div className="sidebar-footer">{masterStatus==='yes'&&<button className="btn soft block" style={{marginBottom:12}} onClick={()=>setMasterView(true)}><ShieldCheck size={16}/>Abrir Admin Master</button>}<div className="sidebar-note"><Sparkles size={16}/><strong>Mais tempo para seu escritório</strong><span>Automatize tarefas repetitivas e foque em seus clientes.</span></div>
         <div className="sidebar-profile"><span className="avatar">{orgLabel.slice(0,2).toUpperCase()}</span><span className="profile-text"><strong>{orgLabel}</strong><small>{demo?'Ambiente demonstrativo':'Espaço do escritório'}</small></span>
           {supabase&&<button className="icon-button" title="Sair" onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={18}/></button>}
         </div></div>
