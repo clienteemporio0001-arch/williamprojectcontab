@@ -1,0 +1,79 @@
+import { useCallback,useEffect,useMemo,useState } from 'react';
+import { Building2,Users,Wallet,ShieldCheck,LogOut,RefreshCw,Search,Settings2,LockKeyhole,CheckCircle2,FileText } from 'lucide-react';
+import { supabase } from './lib/supabase';
+import './master.css';
+
+type Plan={code:string;name:string;client_limit:number;monthly_price_brl:number};
+type Office={id:string;name:string;created_at:string;owner_email:string|null;plan_code:string;plan_name:string;access_status:'active'|'suspended';client_limit:number;monthly_price_brl:number;clients_active:number;charges_total:number;notifications_accepted:number};
+type Data={organizations:Office[];plans:Plan[]};
+type Props={canOpenOffice:boolean;onOpenOffice:()=>void};
+const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
+export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
+ const [tab,setTab]=useState<'home'|'offices'|'plans'>('home');
+ const [data,setData]=useState<Data>({organizations:[],plans:[]});
+ const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
+ const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
+ const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
+ const reload=useCallback(async()=>{if(!supabase)return;setBusy(true);setError('');
+  const {data:result,error:e}=await supabase.rpc('master_dashboard');
+  if(e)setError('Não foi possível consultar o Admin Master: '+e.message);
+  else{const payload=result as Data|null;setData({organizations:payload?.organizations||[],plans:payload?.plans||[]});}
+  setBusy(false);
+ },[]);
+ useEffect(()=>{void reload();},[reload]);
+ const offices=data.organizations;
+ const active=offices.filter(o=>o.access_status==='active');
+ const visible=useMemo(()=>offices.filter(o=>(o.name+' '+(o.owner_email||'')).toLowerCase().includes(term.toLowerCase())),[offices,term]);
+ function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setError('');setNotice('');}
+ async function save(){if(!supabase||!edit)return;
+  if(access==='suspended'&&edit.access_status==='active'&&!window.confirm('Suspender este escritório? Seus clientes e disparos ficarão bloqueados, sem excluir dados.'))return;
+  const target=data.plans.find(p=>p.code===plan);
+  if(target&&edit.clients_active>target.client_limit&&!window.confirm('O número de clientes ativos já ultrapassa o limite do novo plano. Prosseguir sem excluir os clientes existentes?'))return;
+  setBusy(true);const {error:e}=await supabase.rpc('master_update_organization',{p_org_id:edit.id,p_plan_code:plan,p_access_status:access});
+  setBusy(false);if(e){setError(e.message);return;}setEdit(null);setNotice('Escritório atualizado e alteração auditada.');await reload();
+ }
+ return <div className="master-root"><aside className="master-side"><div className="master-logo"><ShieldCheck size={25}/><div><strong>contab<span>flow</span></strong><small>ADMIN MASTER</small></div></div>
+  <div className="master-navlabel">GERENCIAMENTO</div>
+  <button className={tab==='home'?'current':''} onClick={()=>setTab('home')}><Wallet size={18}/>Visão geral</button>
+  <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length}</small></button>
+  <button className={tab==='plans'?'current':''} onClick={()=>setTab('plans')}><Settings2 size={18}/>Planos SaaS</button>
+  <div className="master-sidefoot"><div><LockKeyhole size={17}/> Área restrita ao administrador da plataforma</div>
+   {canOpenOffice&&<button onClick={onOpenOffice}><Building2 size={17}/>Painel do contador</button>}
+   <button onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={17}/>Sair</button>
+  </div></aside>
+  <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>void reload()}><RefreshCw size={16}/>Atualizar</button></header>
+   <div className="master-inner"><p className="master-eyebrow">PAINEL ADMINISTRATIVO</p>
+    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':'Planos e limites'}</h1>
+    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':'Preços configurados para o SaaS (não significam pagamentos recebidos).'}</p>
+    {error&&<div className="master-alert">{error}</div>}{notice&&<div className="master-alert success">{notice}</div>}
+    {busy&&<p className="master-loading">Atualizando informações…</p>}
+    {tab==='home'&&<>
+     <div className="master-kpis">
+      <article><span>Escritórios <Building2 size={18}/></span><strong>{offices.length}</strong><small>{active.length} ativos</small></article>
+      <article><span>Clientes atendidos <Users size={18}/></span><strong>{offices.reduce((a,o)=>a+Number(o.clients_active),0)}</strong><small>Clientes ativos de todos os escritórios</small></article>
+      <article><span>Suspensos <LockKeyhole size={18}/></span><strong>{offices.length-active.length}</strong><small>Acesso e disparos bloqueados</small></article>
+      <article><span>Mensalidades potenciais <Wallet size={18}/></span><strong>{brl(active.reduce((a,o)=>a+Number(o.monthly_price_brl),0))}</strong><small>Estimativa, não faturamento confirmado</small></article>
+     </div>
+     <section className="master-panel"><div className="master-panelhead"><h2>Escritórios recentes</h2><button onClick={()=>setTab('offices')}>Ver todos →</button></div>
+      {offices.slice(0,8).map(o=><div className="master-office" key={o.id}><span className="master-avatar">{o.name.slice(0,2).toUpperCase()}</span><div><strong>{o.name}</strong><small>{o.owner_email||'Responsável não cadastrado'}</small></div><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span></div>)}
+      {!offices.length&&<div className="master-empty">Nenhum escritório cadastrado.</div>}
+     </section>
+    </>}
+    {tab==='offices'&&<section className="master-panel">
+     <div className="master-search"><Search size={18}/><input placeholder="Buscar escritório ou e-mail..." value={term} onChange={e=>setTerm(e.target.value)}/></div>
+     <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th></th></tr></thead><tbody>
+     {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td><td>{o.plan_name}</td><td>{o.clients_active}/{o.client_limit}</td><td>{o.charges_total}</td><td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span></td><td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
+     {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
+    </section>}
+    {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p></article>)}</div>}
+   </div>
+  </main>
+  {edit&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target)setEdit(null);}}><section className="master-modal" role="dialog" aria-modal="true" aria-label="Administrar escritório">
+   <h2>Gerenciar escritório</h2><p>{edit.name} — {edit.owner_email||'Sem responsável'}</p>
+   <label>Plano<select value={plan} onChange={e=>setPlan(e.target.value)}>{data.plans.map(p=><option key={p.code} value={p.code}>{p.name} — até {p.client_limit} clientes</option>)}</select></label>
+   <label>Situação<select value={access} onChange={e=>setAccess(e.target.value as 'active'|'suspended')}><option value="active">Ativo</option><option value="suspended">Suspenso</option></select></label>
+   <p className="master-hint">A suspensão impede acesso aos dados operacionais e futuros envios. Não exclui documentos.</p>
+   <div className="master-modalactions"><button onClick={()=>setEdit(null)}>Cancelar</button><button disabled={busy} onClick={()=>void save()}>{busy?'Salvando…':'Salvar alterações'}</button></div>
+  </section></div>}
+ </div>;
+}
