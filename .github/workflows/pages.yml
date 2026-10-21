@@ -22,6 +22,24 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: node --experimental-strip-types scripts/smoke-pdf.mjs
+      - name: Validar configurações públicas do Supabase
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Faltam as duas Repository Variables do Supabase. Impedindo a publicação de uma demo por engano."
+            exit 1
+          fi
+          case "$VITE_SUPABASE_URL" in
+            https://*.supabase.co) ;;
+            *) echo "::error::VITE_SUPABASE_URL não é uma URL Supabase válida."; exit 1 ;;
+          esac
+          case "$VITE_SUPABASE_ANON_KEY" in
+            sb_publishable_*|eyJ*) ;;
+            *) echo "::error::VITE_SUPABASE_ANON_KEY deve ser a chave pública Publishable ou anon."; exit 1 ;;
+          esac
+          echo "Configurações públicas encontradas. Não serão exibidos seus valores."
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
