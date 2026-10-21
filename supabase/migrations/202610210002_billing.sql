@@ -1,82 +1,98 @@
--- ContabFlow • Fase 2: cobrança de honorários ANTES do pagamento
--- Execute após a migração inicial (202610210001_init.sql).
-alter table public.organizations
-  add column if not exists tax_id text not null default '',
-  add column if not exists pix_key text not null default '',
-  add column if not exists billing_contact text not null default '';
-alter table public.clients
-  add column if not exists tax_id text;
-alter table public.obligations
-  add column if not exists reminder_offsets integer[] not null default array[7,3,1,0];
--- 30 a 0 dias antes, e até 7 dias após o vencimento.
-alter table public.obligations
-  add constraint obligation_reminder_offsets_valid check (
-    array_length(reminder_offsets,1) between 1 and 10 and
-    array_position(reminder_offsets,null) is null and
-    array_to_string(reminder_offsets,',') ~ '^(-?[0-9]+)(,-?[0-9]+)*
-  );
--- Armazenamento privado. Somente o servidor cria/atualiza PDFs.
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values ('billing-documents','billing-documents',false,5242880,array['application/pdf'])
-on conflict(id) do nothing;
+-- CONTABFLOW - ETAPA 2
+-- Execute APENAS apos a Etapa 1.
+-- Avisos de cobranca antes do pagamento, nao recibos de quitacao.
 
-create table public.billing_documents (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
-  obligation_id uuid not null,
-  storage_path text not null,
-  generated_at timestamptz not null default now(),
-  unique(obligation_id),
-  constraint billing_doc_obligation_org foreign key(org_id,obligation_id)
-    references public.obligations(org_id,id) on delete cascade
+BEGIN;
+
+ALTER TABLE public.organizations
+  ADD COLUMN IF NOT EXISTS tax_id text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS pix_key text NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS billing_contact text NOT NULL DEFAULT '';
+
+ALTER TABLE public.clients
+  ADD COLUMN IF NOT EXISTS tax_id text;
+
+ALTER TABLE public.obligations
+  ADD COLUMN IF NOT EXISTS reminder_offsets integer[] NOT NULL
+  DEFAULT ARRAY[7,3,1,0];
+
+ALTER TABLE public.obligations
+  ADD CONSTRAINT obligation_reminder_offsets_valid
+  CHECK (
+    array_length(reminder_offsets,1) BETWEEN 1 AND 10
+    AND array_position(reminder_offsets,NULL) IS NULL
+    AND reminder_offsets <@ ARRAY[
+      -7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,
+      11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,
+      26,27,28,29,30
+    ]
+  );
+
+-- Permissoes explicitas de acesso via API para usuarios autenticados.
+-- RLS segue obrigatorio: cada escritorio visualiza somente seus dados.
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, UPDATE ON public.organizations TO authenticated;
+GRANT SELECT ON public.organization_members TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.clients TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.obligations TO authenticated;
+GRANT SELECT ON public.reminder_logs TO authenticated;
+
+-- Bucket nao publico para PDFs individualizados.
+INSERT INTO storage.buckets (
+  id,name,public,file_size_limit,allowed_mime_types
+) VALUES (
+  'billing-documents',
+  'billing-documents',
+  false,
+  5242880,
+  ARRAY['application/pdf']
+) ON CONFLICT(id) DO NOTHING;
+
+CREATE TABLE public.billing_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  obligation_id uuid NOT NULL,
+  storage_path text NOT NULL,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(obligation_id),
+  CONSTRAINT billing_doc_obligation_org
+    FOREIGN KEY(org_id,obligation_id)
+    REFERENCES public.obligations(org_id,id)
+    ON DELETE CASCADE
 );
-create index billing_doc_org_idx on public.billing_documents(org_id);
-alter table public.billing_documents enable row level security;
-create policy billing_documents_read on public.billing_documents
-  for select to authenticated using(public.is_org_member(org_id));
--- Read limitado ao escritório. Edição/upload do arquivo somente por service_role.
-create policy billing_storage_member_read on storage.objects
-  for select to authenticated using (
-    bucket_id = 'billing-documents' and exists (
-      select 1 from public.organization_members m
-      where m.user_id = auth.uid()
-        and m.org_id::text = split_part(name,'/',1)
+
+CREATE INDEX billing_doc_org_idx
+  ON public.billing_documents(org_id);
+
+ALTER TABLE public.billing_documents ENABLE ROW LEVEL SECURITY;
+GRANT SELECT ON public.billing_documents TO authenticated;
+
+CREATE POLICY billing_documents_read
+  ON public.billing_documents
+  FOR SELECT TO authenticated
+  USING(public.is_org_member(org_id));
+
+-- O usuario autenticado ve PDFs apenas do seu proprio escritorio.
+-- Somente a Edge Function (service_role) cria/altera os arquivos.
+CREATE POLICY billing_storage_member_read
+  ON storage.objects
+  FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'billing-documents'
+    AND EXISTS (
+      SELECT 1
+      FROM public.organization_members m
+      WHERE m.user_id = auth.uid()
+        AND m.org_id::text = split_part(name,'/',1)
     )
   );
- and
-    reminder_offsets <@ array[-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
-  );
--- Armazenamento privado. Somente o servidor cria/atualiza PDFs.
-insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values ('billing-documents','billing-documents',false,5242880,array['application/pdf'])
-on conflict(id) do nothing;
 
-create table public.billing_documents (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
-  obligation_id uuid not null,
-  storage_path text not null,
-  generated_at timestamptz not null default now(),
-  unique(obligation_id),
-  constraint billing_doc_obligation_org foreign key(org_id,obligation_id)
-    references public.obligations(org_id,id) on delete cascade
-);
-create index billing_doc_org_idx on public.billing_documents(org_id);
-alter table public.billing_documents enable row level security;
-create policy billing_documents_read on public.billing_documents
-  for select to authenticated using(public.is_org_member(org_id));
--- Read limitado ao escritório. Edição/upload do arquivo somente por service_role.
-create policy billing_storage_member_read on storage.objects
-  for select to authenticated using (
-    bucket_id = 'billing-documents' and exists (
-      select 1 from public.organization_members m
-      where m.user_id = auth.uid()
-        and m.org_id::text = split_part(name,'/',1)
-    )
-  );
+-- Expandir faixa permitida para datas personalizadas de lembrete.
+ALTER TABLE public.reminder_logs
+  DROP CONSTRAINT IF EXISTS reminder_logs_offset_days_check;
 
--- A versão anterior permitia somente 7/3/1/0/-1.
-alter table public.reminder_logs
-  drop constraint if exists reminder_logs_offset_days_check;
-alter table public.reminder_logs
-  add constraint reminder_offset_range check (offset_days between -7 and 30);
+ALTER TABLE public.reminder_logs
+  ADD CONSTRAINT reminder_offset_range
+  CHECK(offset_days BETWEEN -7 AND 30);
+
+COMMIT;
