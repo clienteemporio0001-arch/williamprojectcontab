@@ -31,10 +31,6 @@ ALTER TABLE public.organizations
 REVOKE UPDATE ON public.organizations FROM PUBLIC, anon, authenticated;
 GRANT UPDATE(name,message_template,tax_id,pix_key,billing_contact,timezone)
   ON public.organizations TO authenticated;
-ALTER POLICY organizations_update ON public.organizations
-  USING(public.is_org_owner(id) AND public.is_org_active(id))
-  WITH CHECK(public.is_org_owner(id) AND public.is_org_active(id));
-
 CREATE TABLE public.master_admins (
   user_id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now()
@@ -66,6 +62,10 @@ AS $$
 $$;
 REVOKE ALL ON FUNCTION public.is_org_active(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_org_active(uuid) TO authenticated, service_role;
+
+ALTER POLICY organizations_update ON public.organizations
+  USING(public.is_org_owner(id) AND public.is_org_active(id))
+  WITH CHECK(public.is_org_owner(id) AND public.is_org_active(id));
 
 -- Suspensao revoga leitura/gravacao de clientes, cobrancas e PDFs.
 ALTER POLICY clients_read ON public.clients
