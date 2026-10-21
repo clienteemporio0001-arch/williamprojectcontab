@@ -1,0 +1,20 @@
+name: Validar funções Supabase
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/validate-backend.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validar TypeScript das funções sem executar envios
+        run: deno check supabase/functions/_shared/billing_pdf.ts supabase/functions/generate-charge/index.ts supabase/functions/dispatch-reminders/index.ts
