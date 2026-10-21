@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
+import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from './lib/registration';
 import {
   type Client, type Obligation, type ReminderLog, DEFAULT_TEMPLATE,
   demoClients, demoObligations, dateISO, daysUntil, money, formatDate,
@@ -72,6 +73,13 @@ export default function App() {
   const [authMode,setAuthMode] = useState<'login'|'signup'>('login');
   const [authEmail,setAuthEmail] = useState('');
   const [authPassword,setAuthPassword] = useState('');
+  const [authPasswordConfirm,setAuthPasswordConfirm] = useState('');
+  const [signupName,setSignupName] = useState('');
+  const [signupOffice,setSignupOffice] = useState('');
+  const [signupTaxId,setSignupTaxId] = useState('');
+  const [signupPhone,setSignupPhone] = useState('');
+  const [signupCRC,setSignupCRC] = useState('');
+  const [authNotice,setAuthNotice] = useState('');
   const [newWorkspace,setNewWorkspace] = useState('');
   const [modal,setModal] = useState<'client'|'obligation'|null>(null);
   const [clientDraft,setClientDraft] = useState<ClientDraft>(blankClient());
@@ -128,6 +136,12 @@ export default function App() {
     })();
     return()=>{valid=false;};
   },[session]);
+
+  useEffect(() => {
+    if(!session)return;
+    const office=session.user.user_metadata?.office_name;
+    if(typeof office==='string'&&office.trim())setNewWorkspace(previous=>previous||office.trim());
+  },[session?.user.id]);
 
   useEffect(() => {
     if(!supabase || !workspace) return;
@@ -220,28 +234,78 @@ export default function App() {
     notify('Preferências salvas.');
   }
   async function submitAuth(e:FormEvent) {
-    e.preventDefault();if(!supabase)return;
-    setSaving(true);setError('');
-    const {error:authError}=authMode==='login'?
-      await supabase.auth.signInWithPassword({email:authEmail,password:authPassword}):
-      await supabase.auth.signUp({email:authEmail,password:authPassword});
-    setSaving(false);
-    if(authError)setError(authError.message);
-    else if(authMode==='signup')notify('Cadastro recebido. Confirme seu e-mail, se solicitado, e entre na plataforma.');
+    e.preventDefault();
+    if(!supabase)return;
+    setAuthNotice('');setError('');
+    const email=authEmail.trim().toLowerCase();
+    let payload:Record<string,string>|undefined;
+    if(authMode==='signup'){
+      if(signupName.trim().length<3){setError('Informe seu nome completo.');return;}
+      if(signupOffice.trim().length<2){setError('Informe o nome do escritório contábil.');return;}
+      const phone=normalizeBrazilPhone(signupPhone);
+      if(!phone){setError('Informe um WhatsApp profissional com DDD válido.');return;}
+      if(signupTaxId.trim()&&!validCNPJ(signupTaxId)){setError('O CNPJ informado não é válido. Confira os 14 dígitos ou deixe em branco se atua como autônomo.');return;}
+      if(authPassword.length<8){setError('Crie uma senha com pelo menos 8 caracteres.');return;}
+      if(authPassword!==authPasswordConfirm){setError('A confirmação de senha não corresponde à senha digitada.');return;}
+      payload={
+        full_name:signupName.trim(),
+        office_name:signupOffice.trim(),
+        company_tax_id:signupTaxId.replace(/\D/g,''),
+        office_phone:phone,
+        crc_registration:signupCRC.trim().slice(0,35)
+      };
+    }
+    setSaving(true);
+    try{
+      const result=authMode==='login'
+        ?await supabase.auth.signInWithPassword({email,password:authPassword})
+        :await supabase.auth.signUp({
+          email,password:authPassword,
+          options:{
+            data:payload,
+            emailRedirectTo:new URL(import.meta.env.BASE_URL,window.location.origin).toString()
+          }
+        });
+      if(result.error){setError(signupErrorMessage(result.error.message));return;}
+      if(authMode==='signup'){
+        setAuthPassword('');setAuthPasswordConfirm('');
+        setAuthNotice(result.data.session
+          ?'Sua conta foi criada! Vamos concluir os dados do seu escritório.'
+          :'Cadastro solicitado. Se a confirmação por e-mail estiver ativada, confira sua caixa de entrada e Spam. Se já tentou antes, verifique o e-mail antes de pedir outro cadastro.');
+      }
+    }catch(e){setError('Não foi possível concluir a solicitação: '+String(e));}
+    finally{setSaving(false);}
   }
   async function makeWorkspace(e:FormEvent) {
-    e.preventDefault();if(!supabase)return;
-    setSaving(true);
-    const {error:workspaceError}=await supabase.rpc('create_workspace',{workspace_name:newWorkspace.trim()});
-    setSaving(false);
-    if(workspaceError){setError(workspaceError.message);return;}
-    if(session){
-      const {data}=await supabase.from('organization_members').select('org_id').eq('user_id',session.user.id).limit(1).single();
-      if(data){
-        const {data:org}=await supabase.from('organizations').select('id,name,message_template,tax_id,pix_key,billing_contact').eq('id',data.org_id).single();
-        if(org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
-      }
+    e.preventDefault();if(!supabase||!session)return;
+    setSaving(true);setError('');
+    const name=newWorkspace.trim();
+    if(name.length<2){setError('Informe o nome do escritório.');setSaving(false);return;}
+    const {data:newId,error:workspaceError}=await supabase.rpc('create_workspace',{workspace_name:name});
+    if(workspaceError){setError(workspaceError.message);setSaving(false);return;}
+    const details=session.user.user_metadata||{};
+    // Dados informados na inscrição são aplicados ao escritório já criado.
+    if(newId){
+      const {error:updateError}=await supabase.from('organizations')
+        .update({
+          tax_id:typeof details.company_tax_id==='string'?details.company_tax_id:'',
+          billing_contact:typeof details.office_phone==='string'?details.office_phone:''
+        }).eq('id',newId);
+      if(updateError)setError('Escritório criado, mas os dados fiscais precisam ser conferidos em Configurações: '+updateError.message);
     }
+    const {data:org, error:fetchError}=await supabase.from('organizations')
+      .select('id,name,message_template,tax_id,pix_key,billing_contact')
+      .eq('id',newId).single();
+    if(fetchError)setError('Escritório criado. Atualize a página para entrar: '+fetchError.message);
+    else if(org){
+      setWorkspace(org as Workspace);
+      setWorkspaceName(org.name);
+      setMessageTemplate(org.message_template);
+      setOfficeTaxId(org.tax_id||'');
+      setPixKey(org.pix_key||'');
+      setBillingContact(org.billing_contact||'');
+    }
+    setSaving(false);
   }
   async function downloadCharge(item:Obligation){
     if(item.status!=='pending'){setError('O documento de cobrança só pode ser gerado para uma obrigação pendente.');return;}
@@ -299,17 +363,38 @@ export default function App() {
   const orgLabel=workspace?.name || workspaceName;
 
   if(checkingAuth)return <div className="splash"><div className="logo-mark"><CalendarClock size={30}/></div><p>Preparando seu painel…</p></div>;
-  if(!demo&&!session)return <div className="auth-wrap"><div className="auth-card">
+  if(!demo&&!session)return <div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
     <div className="brand"><span className="logo-mark"><CalendarClock size={24}/></span><span>contab<span className="brand-accent">flow</span><small>GESTÃO CONTÁBIL INTELIGENTE</small></span></div>
     <div className="auth-kicker">SEU ESCRITÓRIO MAIS PRODUTIVO</div>
-    <h1>{authMode==='login'?'Bem-vindo de volta':'Comece a automatizar'}</h1>
-    <p className="subtle">Organize vencimentos e lembretes dos seus clientes em um só lugar.</p>
-    <form onSubmit={submitAuth} className="stack gap-lg"><label>E-mail<input type="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
-      <label>Senha<input type="password" required minLength={6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder="Mínimo de 6 caracteres"/></label>
-      {error&&<p className="form-error">{error}</p>}
-      <button disabled={saving} className="btn primary block">{saving?'Processando…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
+    <h1>{authMode==='login'?'Bem-vindo de volta':'Crie sua conta de contador'}</h1>
+    <p className="subtle">{authMode==='login'?'Entre para acompanhar seus clientes e cobranças.':'Cadastre seu escritório para começar a automatizar cobranças contábeis.'}</p>
+    <form onSubmit={submitAuth} className="stack gap-lg">
+      {authMode==='signup'&&<>
+        <div className="register-section">RESPONSÁVEL PELO ESCRITÓRIO</div>
+        <div className="register-grid">
+          <label>Nome completo *<input autoComplete="name" required minLength={3} maxLength={120} value={signupName} onChange={e=>setSignupName(e.target.value)} placeholder="Ex.: João da Silva"/></label>
+          <label>WhatsApp profissional *<input type="tel" autoComplete="tel" required value={signupPhone} onChange={e=>setSignupPhone(e.target.value)} placeholder="(68) 99999-9999"/></label>
+        </div>
+        <div className="register-section">DADOS DO ESCRITÓRIO</div>
+        <label>Nome do escritório / nome fantasia *<input required minLength={2} maxLength={100} value={signupOffice} onChange={e=>setSignupOffice(e.target.value)} placeholder="Ex.: Silva Contabilidade"/></label>
+        <div className="register-grid">
+          <label>CNPJ do escritório <span className="register-optional">(se possuir)</span><input inputMode="numeric" maxLength={18} value={signupTaxId} onChange={e=>setSignupTaxId(e.target.value)} placeholder="00.000.000/0001-00"/></label>
+          <label>Registro CRC <span className="register-optional">(opcional)</span><input maxLength={35} value={signupCRC} onChange={e=>setSignupCRC(e.target.value)} placeholder="Ex.: AC-012345/O"/></label>
+        </div>
+        <p className="register-help">Profissionais autônomos podem cadastrar o escritório sem CNPJ. O registro CRC pode ser informado para identificação profissional.</p>
+        <div className="register-section">ACESSO À PLATAFORMA</div>
+      </>}
+      <label>E-mail *<input type="email" autoComplete="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
+      <div className={authMode==='signup'?'register-grid':''}>
+        <label>Senha *<input type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} required minLength={authMode==='signup'?8:6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder={authMode==='signup'?'Mínimo de 8 caracteres':'Sua senha de acesso'}/></label>
+        {authMode==='signup'&&<label>Confirmar senha *<input type="password" required autoComplete="new-password" minLength={8} value={authPasswordConfirm} onChange={e=>setAuthPasswordConfirm(e.target.value)} placeholder="Repita a mesma senha"/></label>}
+      </div>
+      {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
+      {error&&<p role="alert" className="form-error">{error}</p>}
+      {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
+      <button disabled={saving} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
     </form>
-    <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
+    <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
   </div></div>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
