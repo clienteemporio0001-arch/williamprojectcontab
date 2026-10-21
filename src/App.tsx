@@ -14,14 +14,14 @@ import {
 } from './lib/types';
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
-type Workspace = { id: string; name: string; message_template: string };
+type Workspace = { id: string; name: string; message_template: string; tax_id:string;pix_key:string;billing_contact:string };
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
 
 const nav: {id:Page; name:string; icon:typeof LayoutDashboard}[] = [
   {id:'overview',name:'Visão geral',icon:LayoutDashboard},
   {id:'clients',name:'Clientes',icon:Users},
-  {id:'obligations',name:'Obrigações',icon:FileText},
+  {id:'obligations',name:'Cobranças',icon:FileText},
   {id:'automations',name:'Automações',icon:BellRing},
   {id:'settings',name:'Configurações',icon:Settings2}
 ];
@@ -34,8 +34,8 @@ const blankClient = ():ClientDraft => ({
   name:'', company:'', phone:'', opt_in:false, opt_in_at:null, consent_source:null, active:true
 });
 const blankObligation = (clientId=''):ObligationDraft => ({
-  client_id:clientId,title:'DAS — Simples Nacional',amount:null,due_date:dateISO(7),
-  status:'pending',document_url:null,recurring:true,series_id:null,due_day:null
+  client_id:clientId,title:'Honorários contábeis',amount:null,due_date:dateISO(7),
+  status:'pending',document_url:null,recurring:true,series_id:null,due_day:null,reminder_offsets:[7,3,1,0]
 });
 const eventLabel = (days:number) => days < 0 ? Math.abs(days)+' dia(s) em atraso' :
   days === 0 ? 'Vence hoje' : days === 1 ? 'Vence amanhã' : 'Em '+days+' dias';
@@ -59,6 +59,9 @@ export default function App() {
   const [logs,setLogs] = useState<ReminderLog[]>([]);
   const [messageTemplate,setMessageTemplate] = useState(() => readDemo('contabflow_message_v1',DEFAULT_TEMPLATE));
   const [workspaceName,setWorkspaceName] = useState(() => readDemo('contabflow_name_v1','Meu escritório'));
+  const [officeTaxId,setOfficeTaxId] = useState(() => readDemo('contabflow_tax_v2',''));
+  const [pixKey,setPixKey] = useState(() => readDemo('contabflow_pix_v2',''));
+  const [billingContact,setBillingContact] = useState(() => readDemo('contabflow_contact_v2',''));
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
@@ -80,7 +83,10 @@ export default function App() {
     localStorage.setItem('contabflow_obligations_v1',JSON.stringify(obligations));
     localStorage.setItem('contabflow_message_v1',JSON.stringify(messageTemplate));
     localStorage.setItem('contabflow_name_v1',JSON.stringify(workspaceName));
-  },[clients,obligations,messageTemplate,workspaceName,demo]);
+    localStorage.setItem('contabflow_tax_v2',JSON.stringify(officeTaxId));
+    localStorage.setItem('contabflow_pix_v2',JSON.stringify(pixKey));
+    localStorage.setItem('contabflow_contact_v2',JSON.stringify(billingContact));
+  },[clients,obligations,messageTemplate,workspaceName,officeTaxId,pixKey,billingContact,demo]);
 
   useEffect(() => {
     if(!supabase) return;
@@ -102,9 +108,9 @@ export default function App() {
         if(e) throw e;
         if(!membership) {if(valid)setWorkspace(null);return;}
         const {data:org,error:orgError}=await s.from('organizations')
-          .select('id,name,message_template').eq('id',membership.org_id).single();
+          .select('id,name,message_template,tax_id,pix_key,billing_contact').eq('id',membership.org_id).single();
         if(orgError) throw orgError;
-        if(valid){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);}
+        if(valid){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
       } catch(err) { if(valid)setError(String(err)); }
     })();
     return()=>{valid=false;};
@@ -142,7 +148,7 @@ export default function App() {
     setSaving(true);setError('');
     const payload:Client = {
       id:clientDraft.id || crypto.randomUUID(),name:clientDraft.name.trim(),
-      company:clientDraft.company.trim(),phone,
+      company:clientDraft.company.trim(),tax_id:clientDraft.tax_id?.trim()||null,phone,
       opt_in:clientDraft.opt_in, active:clientDraft.active,
       opt_in_at:clientDraft.opt_in?clientDraft.opt_in_at || new Date().toISOString():null,
       consent_source:clientDraft.opt_in?clientDraft.consent_source?.trim()||null:null
@@ -156,6 +162,8 @@ export default function App() {
   }
   async function saveObligation(e:FormEvent) {
     e.preventDefault();
+    if(obligationDraft.amount===null||!Number.isFinite(obligationDraft.amount)||obligationDraft.amount<0){setError('Informe o valor dos honorários para gerar a cobrança.');return;}
+    if(!obligationDraft.reminder_offsets?.length){setError('Escolha pelo menos um dia de envio.');return;}
     if(!obligationDraft.client_id) {setError('Selecione um cliente.');return;}
     if(obligationDraft.document_url && !/^https:\/\//i.test(obligationDraft.document_url)){
       setError('O link do documento deve começar com https://');return;
@@ -170,7 +178,8 @@ export default function App() {
       document_url:obligationDraft.document_url?.trim() || null,
       recurring:obligationDraft.recurring,
       series_id:obligationDraft.recurring ? (base?.series_id || crypto.randomUUID()) : null,
-      due_day:obligationDraft.recurring ? Number(obligationDraft.due_date.split('-')[2]) : null
+      due_day:obligationDraft.recurring ? Number(obligationDraft.due_date.split('-')[2]) : null,
+      reminder_offsets:obligationDraft.reminder_offsets||[7,3,1,0]
     };
     if(demo)setObligations(prev=>obligationDraft.id?prev.map(x=>x.id===payload.id?payload:x):[payload,...prev]);
     else if(supabase && workspace){
@@ -191,9 +200,9 @@ export default function App() {
   async function saveSettings(e:FormEvent) {
     e.preventDefault();
     if(supabase&&workspace) {
-      const {error:e}=await supabase.from('organizations').update({name:workspaceName,message_template:messageTemplate}).eq('id',workspace.id);
+      const {error:e}=await supabase.from('organizations').update({name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact}).eq('id',workspace.id);
       if(e){setError(e.message);return;}
-      setWorkspace({...workspace,name:workspaceName,message_template:messageTemplate});
+      setWorkspace({...workspace,name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact});
     }
     notify('Preferências salvas.');
   }
@@ -216,10 +225,41 @@ export default function App() {
     if(session){
       const {data}=await supabase.from('organization_members').select('org_id').eq('user_id',session.user.id).limit(1).single();
       if(data){
-        const {data:org}=await supabase.from('organizations').select('id,name,message_template').eq('id',data.org_id).single();
+        const {data:org}=await supabase.from('organizations').select('id,name,message_template,tax_id,pix_key,billing_contact').eq('id',data.org_id).single();
         if(org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);}
       }
     }
+  }
+  async function downloadCharge(item:Obligation){
+    if(item.status!=='pending'){setError('O documento de cobrança só pode ser gerado para uma obrigação pendente.');return;}
+    if(item.amount===null){setError('Cadastre o valor antes de gerar o PDF.');return;}
+    const client=clients.find(c=>c.id===item.client_id);
+    if(!client){setError('Cliente não encontrado.');return;}
+    setLoading(true);setError('');
+    try{
+      let pdf:Blob;
+      if(demo){
+        const {makeDemoChargePdf}=await import('./lib/demo-pdf');
+        const data=await makeDemoChargePdf({
+          officeName:workspaceName,officeTaxId,pixKey,billingContact,
+          clientName:client.name,company:client.company,clientTaxId:client.tax_id||'',
+          service:item.title,amount:item.amount,dueDate:item.due_date
+        });
+        pdf=new Blob([new Uint8Array(data)],{type:'application/pdf'});
+      }else{
+        if(!supabase)throw new Error('Supabase não conectado');
+        const {data,error:e}=await supabase.functions.invoke('generate-charge',{body:{obligation_id:item.id}});
+        if(e)throw e;
+        pdf=data instanceof Blob?data:new Blob([data],{type:'application/pdf'});
+      }
+      const link=URL.createObjectURL(pdf);
+      const a=document.createElement('a');
+      a.href=link;a.download='cobranca-'+item.due_date+'.pdf';
+      document.body.append(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(link),10000);
+      notify('PDF de cobrança gerado. Não é comprovante de pagamento.');
+    }catch(err){setError('Não foi possível gerar a cobrança: '+String(err));}
+    finally{setLoading(false);}
   }
   function manualWhatsApp(item:Obligation){
     const client=clients.find(c=>c.id===item.client_id);
@@ -265,7 +305,7 @@ export default function App() {
       {error&&<p className="form-error">{error}</p>}<button className="btn primary block" disabled={saving}>Criar espaço de trabalho</button></form>
   </div></div>;
 
-  const title={overview:'Visão geral',clients:'Clientes',obligations:'Obrigações',automations:'Automações',settings:'Configurações'}[page];
+  const title={overview:'Visão geral',clients:'Clientes',obligations:'Cobranças',automations:'Automações',settings:'Configurações'}[page];
   return <div className="app-shell">
     <aside className={'sidebar '+(menuOpen?'mobile-open':'')}>
       <div className="brand"><span className="logo-mark"><CalendarClock size={22}/></span><span>contab<span className="brand-accent">flow</span><small>AUTOMAÇÃO CONTÁBIL</small></span></div>
@@ -290,11 +330,11 @@ export default function App() {
         <div className="page-header"><div><p className="eyebrow">SUA OPERAÇÃO, SOB CONTROLE</p><h1>{title}</h1>
           <p className="page-intro">{page==='overview'?'Acompanhe seus clientes e vencimentos sem perder nenhum prazo.':
             page==='clients'?'Organize sua carteira de clientes e suas autorizações de contato.':
-            page==='obligations'?'Gerencie documentos, valores, vencimentos e recorrências.':
+            page==='obligations'?'Gere PDFs individuais de cobrança com valor, vencimento e dados do cliente.':
             page==='automations'?'Configure seu fluxo de lembretes e acompanhe as notificações.':
             'Personalize os dados e a comunicação do seu escritório.'}</p></div>
           {page==='clients'&&<button className="btn primary" onClick={()=>showClient()}><Plus size={17}/>Novo cliente</button>}
-          {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length}><Plus size={17}/>Nova obrigação</button>}
+          {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length}><Plus size={17}/>Nova cobrança</button>}
         </div>
 
         {page==='overview'&&<>
@@ -334,11 +374,11 @@ export default function App() {
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
-            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
+            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title="Gerar PDF individual" disabled={o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button><button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
           {!visibleObligations.length&&<tr><td colSpan={5}><div className="empty"><ClipboardList/><strong>Nenhuma obrigação encontrada</strong><p>Adicione uma obrigação para começar.</p></div></td></tr>}</tbody></table></div></section>}
 
-        {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de lembretes</h2><p>Disparos programados para obrigações pendentes</p></div><span className="status neutral">Padrão inicial</span></div>
-          <div className="flow-line">{[{n:'7',t:'7 dias antes',d:'Primeiro aviso'},{n:'3',t:'3 dias antes',d:'Reforço do prazo'},{n:'1',t:'1 dia antes',d:'Último lembrete'},{n:'0',t:'No vencimento',d:'Aviso no dia'},{n:'+',t:'1 dia depois',d:'Em atraso'}].map((v,i)=><div className="flow-step" key={i}><span className="flow-circle">{v.n}</span><div><strong>{v.t}</strong><small>{v.d}</small></div></div>)}</div>
+        {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de cobranças</h2><p>Os dias são configurados individualmente em cada cobrança</p></div><span className="status neutral">Padrão inicial</span></div>
+          <div className="flow-line">{[{n:'7',t:'7 dias antes',d:'Exemplo de aviso'},{n:'3',t:'3 dias antes',d:'Reforço do prazo'},{n:'1',t:'1 dia antes',d:'Último lembrete'},{n:'0',t:'No vencimento',d:'Aviso no dia'},{n:'+',t:'1 dia depois',d:'Em atraso'}].map((v,i)=><div className="flow-step" key={i}><span className="flow-circle">{v.n}</span><div><strong>{v.t}</strong><small>{v.d}</small></div></div>)}</div>
           <div className="info-note"><ShieldCheck size={19}/><p><strong>Automação oficial:</strong> a rotina só envia após configurar Supabase, agendamento e credenciais da Meta. São necessários consentimento registrado e modelo de utilidade aprovado.</p></div>
         </section><section className="panel"><div className="panel-heading"><div><h2>Histórico de envios</h2><p>Confirmações da API de envio (não de leitura)</p></div><Send size={18}/></div>
           {logs.length?<div className="log-list">{logs.slice(0,15).map(log=><div className="log-row" key={log.id}><div><strong>{obligations.find(o=>o.id===log.obligation_id)?.title||'Obrigação'}</strong><span>{new Date(log.created_at).toLocaleString('pt-BR')}</span></div><span className={'status '+(log.status==='sent'?'paid':log.status==='failed'?'late':'neutral')}>{log.status==='sent'?'Aceito pela API':log.status==='failed'?'Falhou':'Processando'}</span></div>)}</div>:<div className="empty"><BellRing/><strong>Nenhum envio registrado</strong><p>O histórico aparecerá após os disparos reais da API.</p></div>}
@@ -346,6 +386,9 @@ export default function App() {
 
         {page==='settings'&&<div className="settings-layout"><section className="panel settings-card"><div className="panel-heading"><div><h2>Identidade do escritório</h2><p>Configurações básicas do seu espaço</p></div><Building2 size={19}/></div>
           <form onSubmit={saveSettings} className="stack gap-lg"><label>Nome do escritório<input required value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} maxLength={100}/></label>
+            <label>CPF/CNPJ do favorecido<input value={officeTaxId} onChange={e=>setOfficeTaxId(e.target.value)} placeholder="Identificação do escritório no PDF"/></label>
+            <label>Chave Pix para pagamento<input value={pixKey} onChange={e=>setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"/></label>
+            <label>Contato para dúvidas<input value={billingContact} onChange={e=>setBillingContact(e.target.value)} placeholder="WhatsApp ou e-mail do escritório"/></label>
             <div className="field"><label htmlFor="template">Mensagem para envio manual</label><p className="field-hint">O disparo automático utiliza um template diferente, aprovado pela Meta.</p>
               <textarea id="template" rows={7} value={messageTemplate} onChange={e=>setMessageTemplate(e.target.value)}/><p className="field-hint">Variáveis: <code>{'{nome}'}</code>, <code>{'{cliente}'}</code>, <code>{'{empresa}'}</code>, <code>{'{documento}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{valor}'}</code> e <code>{'{link}'}</code>.</p>
             </div><button className="btn primary"><Check size={17}/>Salvar alterações</button></form>
@@ -358,18 +401,24 @@ export default function App() {
     </main>
 
     {modal&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)closeModal();}}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><p className="eyebrow">CONTABFLOW</p><h2 id="modal-title">{modal==='client'?(clientDraft.id?'Editar cliente':'Novo cliente'):(obligationDraft.id?'Editar obrigação':'Nova obrigação')}</h2></div><button className="icon-button" aria-label="Fechar" onClick={closeModal}><X size={21}/></button></div>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><p className="eyebrow">CONTABFLOW</p><h2 id="modal-title">{modal==='client'?(clientDraft.id?'Editar cliente':'Novo cliente'):(obligationDraft.id?'Editar cobrança':'Nova cobrança')}</h2></div><button className="icon-button" aria-label="Fechar" onClick={closeModal}><X size={21}/></button></div>
       {modal==='client'?<form onSubmit={saveClient} className="modal-body stack gap-lg"><div className="form-row"><label>Nome completo *<input autoFocus required value={clientDraft.name} onChange={e=>setClientDraft({...clientDraft,name:e.target.value})} placeholder="Ex.: Maria Silva"/></label><label>Empresa<input value={clientDraft.company} onChange={e=>setClientDraft({...clientDraft,company:e.target.value})} placeholder="Razão social ou fantasia"/></label></div>
-        <label>WhatsApp com DDD *<input required value={clientDraft.phone} onChange={e=>setClientDraft({...clientDraft,phone:e.target.value})} placeholder="68 99999-9999"/></label>
+        <label>CPF/CNPJ (opcional)<input value={clientDraft.tax_id||''} onChange={e=>setClientDraft({...clientDraft,tax_id:e.target.value})} placeholder="Identificação no documento"/></label><label>WhatsApp com DDD *<input required value={clientDraft.phone} onChange={e=>setClientDraft({...clientDraft,phone:e.target.value})} placeholder="68 99999-9999"/></label>
         <label className="check-card"><input type="checkbox" checked={clientDraft.opt_in} onChange={e=>setClientDraft({...clientDraft,opt_in:e.target.checked,opt_in_at:e.target.checked?new Date().toISOString():null,consent_source:e.target.checked?clientDraft.consent_source:null})}/><span><strong>O cliente autorizou lembretes pelo WhatsApp</strong><small>Marque apenas com autorização realmente obtida. Ter o contato salvo não é consentimento.</small></span></label>
         {clientDraft.opt_in&&<label>Como a autorização foi obtida? *<input required value={clientDraft.consent_source||''} onChange={e=>setClientDraft({...clientDraft,consent_source:e.target.value})} placeholder="Ex.: contrato de prestação de serviços, 10/10/2026"/></label>}
         <label className="check-card"><input type="checkbox" checked={clientDraft.active} onChange={e=>setClientDraft({...clientDraft,active:e.target.checked})}/><span><strong>Cliente ativo</strong><small>Clientes inativos não recebem lembretes automáticos.</small></span></label>
         {error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="btn soft" onClick={closeModal}>Cancelar</button><button disabled={saving} className="btn primary">{saving?'Salvando…':'Salvar cliente'}</button></div></form>:
         <form onSubmit={saveObligation} className="modal-body stack gap-lg"><label>Cliente *<select required value={obligationDraft.client_id} onChange={e=>setObligationDraft({...obligationDraft,client_id:e.target.value})}><option value="">Selecione um cliente</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name} — {c.company||'PF'}</option>)}</select></label>
-          <label>Documento / obrigação *<input required value={obligationDraft.title} onChange={e=>setObligationDraft({...obligationDraft,title:e.target.value})} placeholder="Ex.: DAS — Simples Nacional"/></label>
-          <div className="form-row"><label>Vencimento *<input type="date" required value={obligationDraft.due_date} onChange={e=>setObligationDraft({...obligationDraft,due_date:e.target.value})}/></label><label>Valor (opcional)<input type="number" min="0" step="0.01" value={obligationDraft.amount??''} onChange={e=>setObligationDraft({...obligationDraft,amount:e.target.value===''?null:Number(e.target.value)})} placeholder="0,00"/></label></div>
-          <label>Link HTTPS do documento (opcional)<input type="url" value={obligationDraft.document_url||''} onChange={e=>setObligationDraft({...obligationDraft,document_url:e.target.value})} placeholder="https://…"/><small className="field-hint">Use somente links autorizados e protegidos. Evite arquivos fiscais públicos.</small></label>
+          <label>Descrição dos honorários *<input required value={obligationDraft.title} onChange={e=>setObligationDraft({...obligationDraft,title:e.target.value})} placeholder="Ex.: DAS — Simples Nacional"/></label>
+          <div className="form-row"><label>Vencimento *<input type="date" required value={obligationDraft.due_date} onChange={e=>setObligationDraft({...obligationDraft,due_date:e.target.value})}/></label><label>Valor dos honorários *<input required type="number" min="0" step="0.01" value={obligationDraft.amount??''} onChange={e=>setObligationDraft({...obligationDraft,amount:e.target.value===''?null:Number(e.target.value)})} placeholder="0,00"/></label></div>
+          <p className="field-hint">O PDF será gerado automaticamente com este valor e vencimento. Ele não será um recibo de quitação.</p>
           <label className="check-card"><input type="checkbox" checked={obligationDraft.recurring} onChange={e=>setObligationDraft({...obligationDraft,recurring:e.target.checked})}/><span><strong>Repetir mensalmente</strong><small>O servidor gera uma nova competência a cada mês, sem duplicar o documento anterior. Links e valores devem ser atualizados quando necessário.</small></span></label>
+          <div className="field"><label>Dias para enviar a cobrança pelo WhatsApp</label>
+            <p className="field-hint">Defina quantos dias antes ou depois do vencimento cada cliente receberá avisos. 0 = no dia.</p>
+            <div className="offset-grid">{[30,15,7,5,3,1,0,-1,-3,-7].map(n=><label className="offset-item" key={n}>
+              <input type="checkbox" checked={(obligationDraft.reminder_offsets||[]).includes(n)} onChange={e=>setObligationDraft({...obligationDraft,reminder_offsets:e.target.checked?[...(obligationDraft.reminder_offsets||[]),n].sort((a,b)=>b-a):(obligationDraft.reminder_offsets||[]).filter(v=>v!==n)})}/>
+              {n>0?n+'d antes':n<0?Math.abs(n)+'d depois':'No dia'}
+            </label>)}</div></div>
           {error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="btn soft" onClick={closeModal}>Cancelar</button><button disabled={saving} className="btn primary">{saving?'Salvando…':'Salvar obrigação'}</button></div></form>}
       </div>
     </div>}

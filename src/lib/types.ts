@@ -1,12 +1,12 @@
 export type Client = {
-  id: string; org_id?: string; name: string; company: string; phone: string;
+  id: string; org_id?: string; name: string; company: string; tax_id?: string | null; phone: string;
   opt_in: boolean; opt_in_at: string | null; consent_source: string | null;
   active: boolean; created_at?: string;
 };
 export type Obligation = {
   id: string; org_id?: string; client_id: string; title: string; amount: number | null;
   due_date: string; status: 'pending' | 'paid' | 'cancelled'; document_url: string | null;
-  recurring: boolean; series_id: string | null; due_day: number | null;
+  recurring: boolean; series_id: string | null; due_day: number | null; reminder_offsets?: number[];
   created_at?: string;
 };
 export type ReminderLog = {
@@ -14,7 +14,7 @@ export type ReminderLog = {
   offset_days: number; status: 'sent' | 'failed' | 'processing';
   created_at: string; error?: string | null;
 };
-export const DEFAULT_TEMPLATE = 'Olá, {nome}! 👋 Lembramos que o documento {documento} vence em {vencimento}. Valor: {valor}. {link} Se já realizou o pagamento, desconsidere este lembrete.';
+export const DEFAULT_TEMPLATE = 'Olá, {nome}! Seus honorários contábeis referentes a {documento} vencem em {vencimento}, no valor de {valor}. Segue o aviso de cobrança. Caso já tenha pago, por favor desconsidere.';
 export function dateISO(delta = 0) {
   const d = new Date();
   d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + delta);
@@ -44,8 +44,8 @@ export const demoClients: Client[] = [
   {id:'demo-c4',name:'Pedro Souza',company:'Souza Transportes',phone:'5568999445566',opt_in:true,opt_in_at:new Date().toISOString(),consent_source:'Formulário (exemplo)',active:true}
 ];
 export const demoObligations: Obligation[] = [
-  {id:'demo-o1',client_id:'demo-c1',title:'DAS — Simples Nacional',amount:385.9,due_date:dateISO(3),status:'pending',document_url:null,recurring:true,series_id:'demo-series1',due_day:new Date(dateISO(3)+'T12:00:00').getDate()},
+  {id:'demo-o1',client_id:'demo-c1',title:'Honorários contábeis',amount:385.9,due_date:dateISO(3),status:'pending',document_url:null,recurring:true,series_id:'demo-series1',due_day:new Date(dateISO(3)+'T12:00:00').getDate()},
   {id:'demo-o2',client_id:'demo-c2',title:'Honorários contábeis',amount:450,due_date:dateISO(1),status:'pending',document_url:null,recurring:true,series_id:'demo-series2',due_day:new Date(dateISO(1)+'T12:00:00').getDate()},
-  {id:'demo-o3',client_id:'demo-c3',title:'DARF',amount:210.5,due_date:dateISO(-2),status:'pending',document_url:null,recurring:false,series_id:null,due_day:null},
-  {id:'demo-o4',client_id:'demo-c4',title:'FGTS',amount:780,due_date:dateISO(7),status:'pending',document_url:null,recurring:true,series_id:'demo-series4',due_day:new Date(dateISO(7)+'T12:00:00').getDate()}
+  {id:'demo-o3',client_id:'demo-c3',title:'Honorários contábeis',amount:210.5,due_date:dateISO(-2),status:'pending',document_url:null,recurring:false,series_id:null,due_day:null},
+  {id:'demo-o4',client_id:'demo-c4',title:'Honorários contábeis',amount:780,due_date:dateISO(7),status:'pending',document_url:null,recurring:true,series_id:'demo-series4',due_day:new Date(dateISO(7)+'T12:00:00').getDate()}
 ];
