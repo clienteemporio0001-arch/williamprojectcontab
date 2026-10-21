@@ -46,7 +46,7 @@ Deno.serve(async(req:Request)=>{
       generated_at:new Date().toISOString()
     },{onConflict:'obligation_id'});
     if(logError)throw logError;
-    return new Response(bytes,{
+    return new Response(new Uint8Array(bytes),{
       status:200,headers:{...cors,'Content-Type':'application/pdf',
         'Content-Disposition':'attachment; filename="cobranca-'+obligation.due_date+'.pdf"',
         'Cache-Control':'no-store'}
