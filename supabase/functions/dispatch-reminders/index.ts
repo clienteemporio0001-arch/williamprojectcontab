@@ -89,7 +89,7 @@ Deno.serve(async(req:Request)=>{
       .select('id,org_id,client_id,title,amount,due_date,document_url,recurring,series_id,due_day')
       .eq('org_id',org.id).eq('recurring',true).order('due_date',{ascending:false}).limit(1000);
     if(cyclesError){stats.failed++;continue;}
-    const latest=new Map<string,typeof cycles extends (infer U)[]?U:never>();
+    const latest=new Map<string, NonNullable<typeof cycles>[number]>();
     for(const item of cycles||[]){
       if(item.series_id && !latest.has(item.series_id))latest.set(item.series_id,item);
     }
