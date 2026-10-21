@@ -226,7 +226,7 @@ export default function App() {
       const {data}=await supabase.from('organization_members').select('org_id').eq('user_id',session.user.id).limit(1).single();
       if(data){
         const {data:org}=await supabase.from('organizations').select('id,name,message_template,tax_id,pix_key,billing_contact').eq('id',data.org_id).single();
-        if(org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);}
+        if(org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
       }
     }
   }
