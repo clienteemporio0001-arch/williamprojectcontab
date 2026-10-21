@@ -74,3 +74,9 @@ create policy billing_storage_member_read on storage.objects
         and m.org_id::text = split_part(name,'/',1)
     )
   );
+
+-- A versão anterior permitia somente 7/3/1/0/-1.
+alter table public.reminder_logs
+  drop constraint if exists reminder_logs_offset_days_check;
+alter table public.reminder_logs
+  add constraint reminder_offset_range check (offset_days between -7 and 30);
