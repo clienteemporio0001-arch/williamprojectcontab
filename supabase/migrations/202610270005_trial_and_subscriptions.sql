@@ -26,7 +26,9 @@ DROP POLICY IF EXISTS saas_trial_settings_public_read ON public.saas_trial_setti
 CREATE POLICY saas_trial_settings_public_read
   ON public.saas_trial_settings FOR SELECT TO anon,authenticated USING(true);
 REVOKE ALL ON public.saas_trial_settings FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON public.saas_trial_settings TO anon, authenticated;
+-- Expor apenas os campos comerciais; identificador do administrador fica privado.
+GRANT SELECT(trial_enabled,trial_days,trial_max_clients,trial_title,trial_description)
+  ON public.saas_trial_settings TO anon, authenticated;
 
 CREATE TABLE public.saas_trial_settings_audit (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
