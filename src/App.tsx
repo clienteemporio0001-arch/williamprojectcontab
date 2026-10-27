@@ -19,6 +19,7 @@ import {
 } from './lib/types';
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
+type SignupPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
 type Workspace = {id:string;name:string;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
@@ -87,6 +88,9 @@ export default function App() {
   const [signupTaxId,setSignupTaxId] = useState('');
   const [signupPhone,setSignupPhone] = useState('');
   const [signupCRC,setSignupCRC] = useState('');
+  const [signupPlan,setSignupPlan] = useState('');
+  const [signupPlans,setSignupPlans] = useState<SignupPlan[]>([]);
+  const [signupPlansError,setSignupPlansError] = useState(false);
   const [authNotice,setAuthNotice] = useState('');
   const [newWorkspace,setNewWorkspace] = useState('');
   const [modal,setModal] = useState<'client'|'obligation'|null>(null);
@@ -99,6 +103,17 @@ export default function App() {
   useEffect(()=>{
     const timer=window.setInterval(()=>setNowTick(Date.now()),60000);
     return()=>window.clearInterval(timer);
+  },[]);
+  useEffect(()=>{
+    if(!supabase)return;
+    let live=true;
+    void supabase.from('subscription_plans').select('code,name,client_limit,monthly_price_brl')
+      .order('client_limit',{ascending:true}).then(({data,error:e})=>{
+        if(!live)return;
+        if(e){setSignupPlansError(true);return;}
+        setSignupPlansError(false);setSignupPlans((data||[]) as SignupPlan[]);
+      });
+    return()=>{live=false;};
   },[]);
   useEffect(()=>{
     if(!supabase)return;
@@ -275,6 +290,7 @@ export default function App() {
     const email=authEmail.trim().toLowerCase();
     let payload:Record<string,string>|undefined;
     if(authMode==='signup'){
+      if(!signupPlans.some(p=>p.code===signupPlan)){setError('Selecione um plano antes de criar a conta.');return;}
       if(signupName.trim().length<3){setError('Informe seu nome completo.');return;}
       if(signupOffice.trim().length<2){setError('Informe o nome do escritório contábil.');return;}
       const phone=normalizeBrazilPhone(signupPhone);
@@ -285,6 +301,7 @@ export default function App() {
       payload={
         full_name:signupName.trim(),
         office_name:signupOffice.trim(),
+        selected_plan_code:signupPlan,
         company_tax_id:signupTaxId.replace(/\D/g,''),
         office_phone:phone,
         crc_registration:signupCRC.trim().slice(0,35)
@@ -416,7 +433,7 @@ export default function App() {
   if(!demo&&!session&&publicScreen==='landing')return <>
     <MarketingLanding trial={trialSettings}
       onLogin={()=>{setAuthMode('login');setPublicScreen('auth');setError('');}}
-      onSignup={()=>{setAuthMode('signup');setPublicScreen('auth');setError('');}}/>
+      onSignup={(planCode)=>{setSignupPlan(planCode||'');setAuthMode('signup');setPublicScreen('auth');setError('');}}/>
     <WhatsAppSupport/>
   </>;
   if(!demo&&!session)return <><div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
@@ -437,6 +454,20 @@ export default function App() {
           <label>CNPJ <span className="register-optional">(opcional)</span><input inputMode="numeric" maxLength={18} value={signupTaxId} onChange={e=>setSignupTaxId(e.target.value)} placeholder="00.000.000/0001-00"/></label>
           <label>CRC <span className="register-optional">(opcional)</span><input maxLength={35} value={signupCRC} onChange={e=>setSignupCRC(e.target.value)} placeholder="Ex.: AC-012345/O"/></label>
         </div>
+        <div className="register-section">ESCOLHA SEU PLANO</div>
+        <div className="signup-plan-grid" role="radiogroup" aria-label="Plano de assinatura">
+          {signupPlans.map(p=><label key={p.code} className={'signup-plan-option '+(signupPlan===p.code?'selected':'')}>
+            <input type="radio" name="signup-plan" value={p.code} checked={signupPlan===p.code}
+              onChange={()=>setSignupPlan(p.code)} required/>
+            <span><strong>{p.name}</strong><small>Até {p.client_limit} clientes no plano pago</small></span>
+            <b>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(p.monthly_price_brl))}<small>/mês</small></b>
+          </label>)}
+        </div>
+        {signupPlansError&&<p className="form-error" role="alert">Não foi possível carregar os planos. Atualize a página para tentar novamente.</p>}
+        {!signupPlansError&&!signupPlans.length&&<p className="register-help">Carregando planos disponíveis...</p>}
+        <p className="signup-trial-note">{trialSettings.trial_enabled
+          ?'Teste grátis de '+trialSettings.trial_days+' dias: até '+trialSettings.trial_max_clients+' clientes e 3 cobranças. Sem cobrança automática ao término.'
+          :'Após o cadastro, seu escritório ficará aguardando liberação. Nenhum valor será cobrado automaticamente.'}</p>
         <div className="register-section">ACESSO À PLATAFORMA</div>
       </>}
       <label>E-mail *<input type="email" autoComplete="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
@@ -462,7 +493,7 @@ export default function App() {
       {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
       {error&&<p role="alert" className="form-error">{error}</p>}
       {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
-      <button disabled={saving||(authMode==='signup'&&(!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
+      <button disabled={saving||(authMode==='signup'&&(!signupPlans.some(p=>p.code===signupPlan)||!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
     </form>
     <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');setShowPassword(false);setShowConfirmPassword(false);}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
     <button type="button" className="public-back" onClick={()=>setPublicScreen('landing')}>← Voltar ao início</button>
@@ -472,8 +503,12 @@ export default function App() {
   if(!demo&&!workspace)return <><div className="auth-wrap"><div className="auth-card">
     <div className="brand"><span className="logo-mark"><Building2/></span><span>contab<span className="brand-accent">flow</span></span></div>
     <h1>Vamos criar seu escritório</h1><p className="subtle">Os dados ficarão separados dos demais escritórios da plataforma.</p>
+    <div className="workspace-chosen-plan">
+      <strong>Plano escolhido: {signupPlans.find(p=>p.code===(session?.user.user_metadata?.selected_plan_code||''))?.name||'Essencial'}</strong>
+      <span>{trialSettings.trial_enabled?'Seu período gratuito inicia após criar o escritório.':'Acesso sujeito à liberação do administrador.'}</span>
+    </div>
     <form onSubmit={makeWorkspace} className="stack gap-lg"><label>Nome do escritório<input required minLength={2} value={newWorkspace} onChange={e=>setNewWorkspace(e.target.value)} placeholder="Ex.: Contabilidade Exemplo"/></label>
-      {trialSettings.trial_enabled&&<p className="workspace-trial-info">Seu teste de {trialSettings.trial_days} dias começará após criar este escritório. Você poderá cadastrar até {trialSettings.trial_max_clients} clientes ativos durante a avaliação.</p>}
+      {trialSettings.trial_enabled&&<p className="workspace-trial-info">Seu teste de {trialSettings.trial_days} dias começará após criar este escritório. Você poderá cadastrar até {trialSettings.trial_max_clients} clientes durante a avaliação.</p>}
       {error&&<p className="form-error">{error}</p>}<button className="btn primary block" disabled={saving}>Criar espaço de trabalho</button></form>
   </div></div><WhatsAppSupport/></>;
 
