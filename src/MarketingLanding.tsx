@@ -5,7 +5,7 @@ import { type TrialSettings } from './lib/trial';
 import './landing.css';
 
 type PublicPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
-type Props={onLogin:()=>void;onSignup:()=>void;trial:TrialSettings};
+type Props={onLogin:()=>void;onSignup:(planCode?:string)=>void;trial:TrialSettings};
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MarketingLanding({onLogin,onSignup,trial}:Props){
   const [plans,setPlans]=useState<PublicPlan[]>([]);
@@ -59,7 +59,7 @@ export default function MarketingLanding({onLogin,onSignup,trial}:Props){
       <section id="precos" className="landing-pricing">
         <div className="landing-section-kicker">PLANOS PARA CADA ESCRITÓRIO</div>
         <h2>Comece pequeno e cresça com a sua carteira.</h2>
-        {plans.length>0?<div className="landing-pricing-grid">{plans.map(p=><div key={p.code} className="landing-price-card"><h3>{p.name}</h3><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p>Até {p.client_limit} clientes ativos</p><button onClick={onSignup}>{trial.trial_enabled?'Experimentar':'Criar conta'} <ArrowRight size={15}/></button></div>)}</div>
+        {plans.length>0?<div className="landing-pricing-grid">{plans.map(p=><div key={p.code} className="landing-price-card"><h3>{p.name}</h3><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p>Até {p.client_limit} clientes ativos</p>{trial.trial_enabled&&<p className="landing-plan-trial">Teste grátis de {trial.trial_days} {trial.trial_days===1?'dia':'dias'} · até {trial.trial_max_clients} clientes no teste</p>}<button onClick={()=>onSignup(p.code)}>{trial.trial_enabled?'Testar este plano':'Escolher este plano'} <ArrowRight size={15}/></button></div>)}</div>
         :<p className="landing-price-placeholder">Os planos estão sendo configurados. Consulte nossa equipe para conhecer os valores.</p>}
         <p className="landing-price-disclaimer">Valores informativos. A assinatura e os envios automáticos ainda dependem da ativação dos respectivos serviços.</p>
       </section>
