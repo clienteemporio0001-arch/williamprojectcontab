@@ -102,7 +102,7 @@ CREATE TABLE public.saas_activity_events (
   event_type text NOT NULL CHECK(event_type IN(
     'client_created','client_updated','client_deleted',
     'charge_created','charge_updated','charge_deleted',
-    'charge_paid','charge_reopened')),
+    'charge_paid','charge_reopened','pdf_generated')),
   entity_id uuid,
   occurred_at timestamptz NOT NULL DEFAULT now()
 );
@@ -138,7 +138,8 @@ BEGIN
   END IF;
   INSERT INTO public.saas_activity_events(org_id,actor_user_id,event_type,entity_id)
   VALUES(v_org,auth.uid(),v_kind,v_entity);
-  RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.log_saas_activity()
