@@ -1,0 +1,11 @@
+.support-float{
+position:fixed;right:24px;bottom:23px;z-index:70;
+display:flex;align-items:center;gap:10px;min-height:53px;
+padding:12px 18px;border-radius:100px;border:1px solid #1f9c6c;
+background:#20c77f;color:#063824;box-shadow:0 11px 30px #0008;
+font-family:'DM Sans',sans-serif;font-size:12px;font-weight:800;
+transition:transform .18s,box-shadow .18s;white-space:nowrap
+}
+.support-float:hover{transform:translateY(-3px);background:#33de99;box-shadow:0 13px 36px #000a}
+.support-float:focus-visible{outline:3px solid #c8fff0;outline-offset:4px}
+@media(max-width:650px){.support-float{right:14px;bottom:15px;min-width:52px;width:52px;height:52px;padding:0;justify-content:center}.support-float span{display:none}}
