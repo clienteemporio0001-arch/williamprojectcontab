@@ -117,3 +117,12 @@
 .master-monitor .master-tablewrap small{display:block;color:#8daabb;font-size:10px;margin-top:5px}
 @media(max-width:1000px){.master-trial-pulse,.master-trial-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.master-trial-pulse,.master-trial-stats{grid-template-columns:1fr 1fr}.master-trial-table{margin:0 14px 18px}.master-monitor-tools select{min-width:100%}.master-activity-item time{font-size:9px}}
+
+/* Configuração de teste integrada em Planos SaaS */
+.master-plan-grid+.master-trial{margin-top:26px;max-width:none}
+.master-plan-grid+.master-trial .master-trial-content{max-width:890px}
+.master-trial-presets{display:flex;gap:8px;flex-wrap:wrap}
+.master-trial-presets>button{background:#152e43;color:#a7ced0;border:1px solid #3b5d69;
+ border-radius:8px;padding:9px 13px;font-size:11px;font-weight:800}
+.master-trial-presets>button.chosen{background:#215b4a;border-color:#58dcad;color:#d5ffeb}
+.master-trial-presets>button:focus-visible{outline:2px solid #6feac7;outline-offset:2px}
