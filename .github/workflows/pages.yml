@@ -24,6 +24,7 @@ jobs:
       - run: node --experimental-strip-types scripts/smoke-pdf.mjs
       - run: node --experimental-strip-types scripts/test-registration.mjs
       - run: node --experimental-strip-types scripts/test-plan-prices.mjs
+      - run: node --experimental-strip-types scripts/test-trial.mjs
       - name: Validar configurações públicas do Supabase
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
