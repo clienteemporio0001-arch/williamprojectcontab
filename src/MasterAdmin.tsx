@@ -15,7 +15,7 @@ type MonitorData={registrations:Signup[];activities:MonitorEvent[]};
 const EVENT_LABELS:Record<string,string>={
  client_created:'Cliente cadastrado',client_updated:'Cliente atualizado',client_deleted:'Cliente excluído',
  charge_created:'Cobrança criada',charge_updated:'Cobrança atualizada',charge_deleted:'Cobrança excluída',
- charge_paid:'Pagamento registrado',charge_reopened:'Cobrança reaberta'
+ charge_paid:'Pagamento registrado',charge_reopened:'Cobrança reaberta',pdf_generated:'PDF gerado'
 };
 const timestamp=(value:string)=>new Date(value).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
 const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;access_status?:string|null})=>
@@ -234,7 +234,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
           <thead><tr><th>ESCRITÓRIO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th>VENCIMENTO</th><th></th></tr></thead>
           <tbody>{trialOffices.map(o=><tr key={o.id}>
             <td><strong>{o.name}</strong><small>{o.owner_email||'Sem responsável'}</small></td>
-            <td>{o.clients_active}/3</td><td>{o.charges_total}/3</td>
+            <td>{o.clients_active}/{trial.trial_max_clients}</td><td>{o.charges_total}/3</td>
             <td><span className="master-trial-status trial">{trialLabel(o)}</span></td>
             <td>{o.trial_ends_at?timestamp(o.trial_ends_at):'Sem data'}</td>
             <td><button onClick={()=>begin(o)}>Gerenciar</button></td>
@@ -274,7 +274,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
         </table></div>
       </section>
       <section className="master-panel">
-        <div className="master-panelhead"><h2>Atividades registradas ({filteredActivities.length})</h2><span>Clientes, cobranças e pagamentos marcados no sistema</span></div>
+        <div className="master-panelhead"><h2>Atividades registradas ({filteredActivities.length})</h2><span>Clientes, cobranças, PDFs e pagamentos marcados no sistema</span></div>
         <div className="master-activity-list">
           {filteredActivities.map(ev=><div className="master-activity-item" key={ev.id}>
              <Activity size={16}/><div><strong>{EVENT_LABELS[ev.event_type]||ev.event_type}</strong>
