@@ -6,7 +6,7 @@ import {
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
   Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff
 } from 'lucide-react';
-import { supabase } from './lib/supabase';
+import { supabase, checkSupabaseConnection } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
 import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from './lib/registration';
 import {
@@ -82,6 +82,8 @@ export default function App() {
   const [signupPhone,setSignupPhone] = useState('');
   const [signupCRC,setSignupCRC] = useState('');
   const [authNotice,setAuthNotice] = useState('');
+  const [connectionChecking,setConnectionChecking] = useState(false);
+  const [connectionResult,setConnectionResult] = useState<{ok:boolean;message:string}|null>(null);
   const [newWorkspace,setNewWorkspace] = useState('');
   const [modal,setModal] = useState<'client'|'obligation'|null>(null);
   const [clientDraft,setClientDraft] = useState<ClientDraft>(blankClient());
@@ -234,6 +236,11 @@ export default function App() {
       setWorkspace({...workspace,name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact});
     }
     notify('Preferências salvas.');
+  }
+  async function diagnoseConnection(){
+    setConnectionChecking(true);setConnectionResult(null);
+    const result=await checkSupabaseConnection();
+    setConnectionResult(result);setConnectionChecking(false);
   }
   async function submitAuth(e:FormEvent) {
     e.preventDefault();
@@ -410,9 +417,16 @@ export default function App() {
       </div>}
       {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
       {error&&<p role="alert" className="form-error">{error}</p>}
+      {connectionResult&&<div role="status" className={'auth-notice '+(connectionResult.ok?'':'auth-connection-failed')}>
+        {connectionResult.ok?<CheckCircle2 size={18}/>:<AlertTriangle size={18}/>}
+        <span>{connectionResult.message}</span>
+      </div>}
       {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
       <button disabled={saving||(authMode==='signup'&&(!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
     </form>
+    <button type="button" className="auth-connection-test" onClick={()=>void diagnoseConnection()} disabled={connectionChecking}>
+      {connectionChecking?'Verificando conexão…':'Testar conexão com o Supabase'}
+    </button>
     <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');setShowPassword(false);setShowConfirmPassword(false);}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
   </div></div>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
