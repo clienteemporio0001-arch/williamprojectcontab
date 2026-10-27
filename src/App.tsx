@@ -407,7 +407,7 @@ export default function App() {
         {passwordMatch?<span className="password-ok"><CheckCircle2 size={16}/> As senhas coincidem</span>
           :passwordMismatch?<span className="password-error"><AlertTriangle size={16}/> As senhas não coincidem</span>
           :<span className="password-pending">Digite a senha novamente para confirmar.</span>}
-      </div>
+      </div>}
       {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
       {error&&<p role="alert" className="form-error">{error}</p>}
       {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
