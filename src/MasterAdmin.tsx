@@ -172,7 +172,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
     {tab==='home'&&<>
      <div className="master-trial-pulse">
        <button onClick={()=>setTab('plans')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
-       <button onClick={()=>setTab('trial')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
+       <button onClick={()=>setTab('plans')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Cadastros sem escritório <strong>{pendingSignups.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><Activity size={17}/> Ações recentes <strong>{monitor.activities.length}</strong></button>
      </div>
