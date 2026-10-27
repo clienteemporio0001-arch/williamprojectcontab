@@ -23,7 +23,7 @@ const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;acce
  o.billing_status==='trialing'
   ?remainingTrialDays(o.trial_ends_at||null)>0?'Em teste':'Teste expirado'
   :o.billing_status==='pending'?'Aguardando ativação'
-  :o.billing_status==='active'?'Assinatura liberada':'Sem escritório';
+  :o.billing_status==='active'?'Assinatura liberada':'Situação do teste indisponível';
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'>('home');
@@ -105,7 +105,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
 
  const offices=data.organizations;
  const active=offices.filter(o=>o.access_status==='active');
- const paying=active.filter(o=>!o.billing_status||o.billing_status==='active');
+ const paying=active.filter(o=>o.billing_status==='active');
  const visible=useMemo(()=>offices.filter(o=>(o.name+' '+(o.owner_email||'')).toLowerCase().includes(term.toLowerCase())),[offices,term]);
  const trialOffices=offices.filter(o=>o.billing_status==='trialing');
  const runningTrials=trialOffices.filter(o=>remainingTrialDays(o.trial_ends_at||null)>0);
@@ -193,7 +193,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th></th></tr></thead><tbody>
      {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td><td>{o.plan_name}</td><td>{o.clients_active}/{o.client_limit}</td><td>{o.charges_total}</td><td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span>
  <small>{o.billing_status==='trialing'?(remainingTrialDays(o.trial_ends_at||null)>0?'Teste: '+remainingTrialDays(o.trial_ends_at||null)+' dia(s)':'Teste encerrado')
- :o.billing_status==='pending'?'Aguardando liberação':'Assinatura liberada'}</small></td>
+ :o.billing_status==='pending'?'Aguardando liberação':o.billing_status==='active'?'Assinatura liberada':'Configuração pendente'}</small></td>
  <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
      {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
@@ -346,10 +346,10 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
    <div className="master-subscription-control">
      <strong>Assinatura e teste</strong>
      <p>{edit.billing_status==='active'?'Assinatura liberada':
-       edit.billing_status==='pending'?'Aguardando contratação':'Teste gratuito · '+(remainingTrialDays(edit.trial_ends_at||null)>0
+       edit.billing_status==='pending'?'Aguardando contratação':edit.billing_status!=='trialing'?'Configuração do teste pendente no Supabase':'Teste gratuito · '+(remainingTrialDays(edit.trial_ends_at||null)>0
          ?remainingTrialDays(edit.trial_ends_at||null)+' dia(s) restante(s)':'encerrado')}</p>
      {edit.trial_ends_at&&<small>Vencimento do teste: {new Date(edit.trial_ends_at).toLocaleDateString('pt-BR')}</small>}
-     {edit.billing_status!=='active'&&<div className="master-trial-actions">
+     {(edit.billing_status==='trialing'||edit.billing_status==='pending')&&<div className="master-trial-actions">
        <label>Adicionar dias<input type="number" min={1} max={90} step={1}
          value={extendDays} onChange={e=>setExtendDays(Number(e.target.value))}/></label>
        <button type="button" disabled={busy} onClick={()=>void changeBilling('extend_trial')}>Prorrogar teste</button>
