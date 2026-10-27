@@ -387,12 +387,11 @@ export default function App() {
           <label>WhatsApp profissional *<input type="tel" autoComplete="tel" required value={signupPhone} onChange={e=>setSignupPhone(e.target.value)} placeholder="(68) 99999-9999"/></label>
         </div>
         <div className="register-section">DADOS DO ESCRITÓRIO</div>
-        <label>Nome do escritório / nome fantasia *<input required minLength={2} maxLength={100} value={signupOffice} onChange={e=>setSignupOffice(e.target.value)} placeholder="Ex.: Silva Contabilidade"/></label>
-        <div className="register-grid">
-          <label>CNPJ do escritório <span className="register-optional">(se possuir)</span><input inputMode="numeric" maxLength={18} value={signupTaxId} onChange={e=>setSignupTaxId(e.target.value)} placeholder="00.000.000/0001-00"/></label>
-          <label>Registro CRC <span className="register-optional">(opcional)</span><input maxLength={35} value={signupCRC} onChange={e=>setSignupCRC(e.target.value)} placeholder="Ex.: AC-012345/O"/></label>
+        <div className="register-grid-office">
+          <label>Nome do escritório *<input required minLength={2} maxLength={100} value={signupOffice} onChange={e=>setSignupOffice(e.target.value)} placeholder="Ex.: Silva Contabilidade"/></label>
+          <label>CNPJ <span className="register-optional">(opcional)</span><input inputMode="numeric" maxLength={18} value={signupTaxId} onChange={e=>setSignupTaxId(e.target.value)} placeholder="00.000.000/0001-00"/></label>
+          <label>CRC <span className="register-optional">(opcional)</span><input maxLength={35} value={signupCRC} onChange={e=>setSignupCRC(e.target.value)} placeholder="Ex.: AC-012345/O"/></label>
         </div>
-        <p className="register-help">Profissionais autônomos podem cadastrar o escritório sem CNPJ. O registro CRC pode ser informado para identificação profissional.</p>
         <div className="register-section">ACESSO À PLATAFORMA</div>
       </>}
       <label>E-mail *<input type="email" autoComplete="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
