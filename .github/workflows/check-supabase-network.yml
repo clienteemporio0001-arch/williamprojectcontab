@@ -1,0 +1,41 @@
+name: Diagnosticar acesso público ao Supabase
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/check-supabase-network.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+    steps:
+      - name: Verificar DNS e conectividade sem acessar credenciais
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, socket, urllib.parse, urllib.request, urllib.error
+          url = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
+          if not url:
+              raise SystemExit('CONFIG_ERROR: URL pública ausente nas variables do GitHub')
+          parsed = urllib.parse.urlsplit(url)
+          host = parsed.hostname
+          if parsed.scheme != 'https' or not host or not host.endswith('.supabase.co'):
+              raise SystemExit('CONFIG_ERROR: URL não corresponde ao formato do Supabase')
+          print('ENDERECO_PUBLICO:', host, flush=True)
+          try:
+              addresses = sorted({x[4][0] for x in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)})
+          except socket.gaierror as e:
+              raise SystemExit('DNS_ERROR: o domínio não resolveu em um runner externo: ' + str(e))
+          print('DNS_OK:', ', '.join(addresses), flush=True)
+          req = urllib.request.Request(url+'/auth/v1/health',headers={'Accept':'application/json'})
+          try:
+              with urllib.request.urlopen(req,timeout=12) as response:
+                  print('HTTPS_OK: status', response.status,flush=True)
+          except urllib.error.HTTPError as e:
+              print('HTTPS_REACHED: endpoint respondeu HTTP',e.code,flush=True)
+          except Exception as e:
+              raise SystemExit('NETWORK_ERROR: DNS resolveu, mas a conexão HTTPS falhou: '+str(e))
+          PY
