@@ -22,6 +22,9 @@ export function signupErrorMessage(raw:string):string{
     const seconds=raw.match(/(\d+)\s*(?:seconds?|segundos?)/i)?.[1];
     return 'O Supabase ativou um limite temporário de segurança. Aguarde '+(seconds?seconds+' segundos':'alguns instantes')+' e tente novamente apenas uma vez. Confira também se chegou um e-mail de confirmação.';
   }
+  if(/failed to fetch|network request failed|networkerror|fetcherror|load failed|err_name_not_resolved|err_connection/i.test(message)){
+    return 'Não foi possível conectar ao servidor do Supabase. Isso não indica senha errada. Clique em “Testar conexão”, confira a URL do projeto e experimente uma janela anônima ou outra rede.';
+  }
   if(/already registered|user already exists|already exists/i.test(message))return 'Este e-mail pode já ter uma conta. Experimente entrar ou recuperar a senha.';
   if(/email not confirmed/i.test(message))return 'Confirme seu endereço de e-mail antes de entrar. Verifique também a pasta Spam.';
   if(/invalid login credentials/i.test(message))return 'E-mail ou senha incorretos. Confirme os dados e tente novamente.';
