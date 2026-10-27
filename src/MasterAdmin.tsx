@@ -1,6 +1,7 @@
 import { useCallback,useEffect,useMemo,useState } from 'react';
-import { Building2,Users,Wallet,ShieldCheck,LogOut,RefreshCw,Search,Settings2,LockKeyhole,CheckCircle2,FileText } from 'lucide-react';
+import { Building2,Users,Wallet,ShieldCheck,LogOut,RefreshCw,Search,Settings2,LockKeyhole,CheckCircle2,FileText,Pencil } from 'lucide-react';
 import { supabase } from './lib/supabase';
+import {parsePlanPrice,formatPlanPriceInput} from './lib/plan-prices';
 import './master.css';
 
 type Plan={code:string;name:string;client_limit:number;monthly_price_brl:number};
@@ -14,6 +15,9 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
  const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
+ const [editPrice,setEditPrice]=useState<Plan|null>(null);
+ const [priceInput,setPriceInput]=useState('');
+ const [priceError,setPriceError]=useState('');
  const reload=useCallback(async()=>{if(!supabase)return;setBusy(true);setError('');
   const {data:result,error:e}=await supabase.rpc('master_dashboard');
   if(e)setError('Não foi possível consultar o Admin Master: '+e.message);
@@ -25,6 +29,39 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const active=offices.filter(o=>o.access_status==='active');
  const visible=useMemo(()=>offices.filter(o=>(o.name+' '+(o.owner_email||'')).toLowerCase().includes(term.toLowerCase())),[offices,term]);
  function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setError('');setNotice('');}
+ function beginPrice(p:Plan){
+  setEditPrice(p);setPriceInput(formatPlanPriceInput(Number(p.monthly_price_brl)));
+  setPriceError('');setError('');setNotice('');
+ }
+ async function savePrice(){
+  if(!supabase||!editPrice)return;
+  const newPrice=parsePlanPrice(priceInput);
+  if(newPrice===null){setPriceError('Digite um valor de R$ 0,00 a R$ 99.999,99, com até dois centavos. Ex.: 79,90');return;}
+  const priorPrice=Number(editPrice.monthly_price_brl);
+  if(newPrice===priorPrice){setEditPrice(null);return;}
+  const accepted=window.confirm(
+    'Atualizar o plano '+editPrice.name+' de '+brl(priorPrice)+' para '+brl(newPrice)+' por mês?\\n\\n'+
+    'O novo preço será exibido no Admin Master e nas estimativas. Não altera pagamentos de assinaturas externas.'
+  );
+  if(!accepted)return;
+  setBusy(true);setPriceError('');
+  const {error:e}=await supabase.rpc('master_update_plan_price',{
+    p_plan_code:editPrice.code,
+    p_new_price:newPrice,
+    p_expected_price:priorPrice
+  });
+  if(e){
+    setBusy(false);
+    setPriceError(/function|schema cache|not found/i.test(e.message)
+      ?'Instale a Etapa 4 (SQL de preços dos planos) no Supabase antes de salvar.'
+      :'Não foi possível salvar o preço: '+e.message);
+    return;
+  }
+  const planName=editPrice.name;
+  setEditPrice(null);
+  await reload();
+  setNotice('Preço de '+planName+' atualizado para '+brl(newPrice)+'/mês e registrado na auditoria.');
+ }
  async function save(){if(!supabase||!edit)return;
   if(access==='suspended'&&edit.access_status==='active'&&!window.confirm('Suspender este escritório? Seus clientes e disparos ficarão bloqueados, sem excluir dados.'))return;
   const target=data.plans.find(p=>p.code===plan);
@@ -65,9 +102,28 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td><td>{o.plan_name}</td><td>{o.clients_active}/{o.client_limit}</td><td>{o.charges_total}</td><td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span></td><td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
      {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
-    {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p></article>)}</div>}
+    {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p><button type="button" className="master-price-edit" disabled={busy} onClick={()=>beginPrice(p)}><Pencil size={16}/> Alterar valor</button></article>)}</div>}
    </div>
   </main>
+  {editPrice&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!busy)setEditPrice(null);}}>
+    <section className="master-modal" role="dialog" aria-modal="true" aria-labelledby="plan-price-dialog-title">
+      <h2 id="plan-price-dialog-title">Alterar valor do plano</h2>
+      <p>{editPrice.name} — atualmente {brl(Number(editPrice.monthly_price_brl))}/mês</p>
+      <label htmlFor="plan-price-input">Novo valor mensal (R$)
+        <input id="plan-price-input" type="text" inputMode="decimal" maxLength={8} autoFocus
+          value={priceInput} onChange={e=>{setPriceInput(e.target.value);setPriceError('');}}
+          placeholder="Ex.: 79,90" aria-invalid={!!priceError} />
+      </label>
+      {priceError&&<p className="master-price-error" role="alert">{priceError}</p>}
+      <p className="master-hint">O valor ficará salvo no Supabase, será exibido nos planos e atualizará a estimativa mensal do dashboard. Clientes existentes não serão cobrados automaticamente.</p>
+      <div className="master-modalactions">
+        <button type="button" disabled={busy} onClick={()=>setEditPrice(null)}>Cancelar</button>
+        <button type="button" disabled={busy||parsePlanPrice(priceInput)===null} onClick={()=>void savePrice()}>
+          {busy?'Salvando…':'Salvar novo valor'}
+        </button>
+      </div>
+    </section>
+  </div>}
   {edit&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target)setEdit(null);}}><section className="master-modal" role="dialog" aria-modal="true" aria-label="Administrar escritório">
    <h2>Gerenciar escritório</h2><p>{edit.name} — {edit.owner_email||'Sem responsável'}</p>
    <label>Plano<select value={plan} onChange={e=>setPlan(e.target.value)}>{data.plans.map(p=><option key={p.code} value={p.code}>{p.name} — até {p.client_limit} clientes</option>)}</select></label>
