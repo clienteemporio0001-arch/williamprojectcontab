@@ -5,7 +5,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createChargePdf } from '../_shared/billing_pdf.ts';
 
-type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended' };
+type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null };
 type Client = { id:string; name:string; phone:string; active:boolean; opt_in:boolean; opt_in_at:string|null };
 type Obligation = {
   id:string; org_id:string; client_id:string; title:string; due_date:string;
@@ -90,11 +90,14 @@ Deno.serve(async(req:Request)=>{
 
   const stats={dryRun,organizations:0,generated:0,wouldSend:0,sent:0,failed:0,skipped:0};
   const {data:orgs,error:orgError}=await db.from('organizations')
-    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status').limit(200);
+    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at').limit(200);
   if(orgError)return fail(orgError.message);
 
   for(const org of (orgs||[]) as Org[]) {
-    if(org.access_status!=='active'){stats.skipped++;continue;}
+    if(org.access_status!=='active' || !(
+      org.billing_status==='active' ||
+      (org.billing_status==='trialing' && org.trial_ends_at && Date.parse(org.trial_ends_at)>Date.now())
+    )){stats.skipped++;continue;}
     let local;
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
