@@ -26,7 +26,7 @@ export default function MarketingLanding({onLogin,onSignup,trial}:Props){
       <nav aria-label="Navegação pública" className="landing-nav">
         <a href="#vantagens">Vantagens</a><a href="#precos">Planos</a>
         <button onClick={onLogin}>Entrar</button>
-        <button className="landing-nav-primary" onClick={onSignup}>Criar conta</button>
+        <button className="landing-nav-primary" onClick={()=>onSignup()}>Criar conta</button>
       </nav>
     </header>
     <main>
@@ -37,7 +37,7 @@ export default function MarketingLanding({onLogin,onSignup,trial}:Props){
           <p>Organize honorários contábeis, gere avisos personalizados em PDF e prepare lembretes por cliente. Tudo em um só painel.</p>
           {trial.trial_enabled&&<div className="landing-trial"><Clock3 size={18}/><div><strong>{trial.trial_title}</strong><span>{trial.trial_days} {trial.trial_days===1?'dia':'dias'} grátis para conhecer a plataforma · até {trial.trial_max_clients} clientes no teste.</span></div></div>}
           <div className="landing-actions">
-            <button className="landing-cta" onClick={onSignup}>{trial.trial_enabled?'Começar teste grátis':'Criar conta'} <ArrowRight size={18}/></button>
+            <button className="landing-cta" onClick={()=>onSignup()}>{trial.trial_enabled?'Começar teste grátis':'Criar conta'} <ArrowRight size={18}/></button>
             <button className="landing-secondary" onClick={onLogin}>Já tenho uma conta</button>
           </div>
           <small>{trial.trial_enabled?trial.trial_description:'Crie sua conta e solicite a liberação do seu escritório.'} {trial.trial_enabled?'Sem cobrança automática no período de teste.':''}</small>
