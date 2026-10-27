@@ -197,6 +197,9 @@ export default function App() {
   function closeModal(){setModal(null);setError('');}
   async function saveClient(e:FormEvent) {
     e.preventDefault();
+    if(!demo&&workspace?.billing_status==='trialing'&&!clientDraft.id&&clients.length>=trialSettings.trial_max_clients){
+      setError('Seu teste grátis permite cadastrar até '+trialSettings.trial_max_clients+' clientes. Contrate um plano para cadastrar mais.');return;
+    }
     const number=phoneDigits(clientDraft.phone);
     const phone=number.startsWith('55')?number:'55'+number;
     if(!/^55\d{10,11}$/.test(phone)) {setError('Informe um WhatsApp válido com DDD. Exemplo: 68 99999-9999.');return;}
@@ -218,6 +221,9 @@ export default function App() {
   }
   async function saveObligation(e:FormEvent) {
     e.preventDefault();
+    if(!demo&&workspace?.billing_status==='trialing'&&!obligationDraft.id&&obligations.length>=3){
+      setError('Durante o teste grátis, você pode criar até 3 cobranças. Contrate um plano para continuar.');return;
+    }
     if(obligationDraft.amount===null||!Number.isFinite(obligationDraft.amount)||obligationDraft.amount<0){setError('Informe o valor dos honorários para gerar a cobrança.');return;}
     if(!obligationDraft.reminder_offsets?.length){setError('Escolha pelo menos um dia de envio.');return;}
     if(!obligationDraft.client_id) {setError('Selecione um cliente.');return;}
@@ -399,6 +405,10 @@ export default function App() {
   const workspaceAllowed=demo||!workspace||(!workspace.billing_status&&workspace.access_status!=='suspended')||
     isWorkspaceAllowed(workspace.access_status,workspace.billing_status,workspace.trial_ends_at||null,nowTick);
   const trialDaysLeft=workspace?.billing_status==='trialing'?remainingTrialDays(workspace.trial_ends_at||null,nowTick):0;
+  const isTrial=!demo&&workspace?.billing_status==='trialing';
+  const trialClientLimit=trialSettings.trial_max_clients||3;
+  const canAddTrialClient=!isTrial||clients.length<trialClientLimit;
+  const canAddTrialCharge=!isTrial||obligations.length<3;
   const passwordMatch = authPasswordConfirm.length > 0 && authPassword === authPasswordConfirm;
   const passwordMismatch = authPasswordConfirm.length > 0 && authPassword !== authPasswordConfirm;
 
@@ -497,11 +507,11 @@ export default function App() {
         <div className="top-right"><span className="today-pill"><Clock3 size={15}/>{new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(new Date())}</span><span className="mini-avatar">{orgLabel[0]?.toUpperCase()||'C'}</span></div>
       </header>
       <div className="main-content">
-        {!demo&&workspace?.billing_status==='trialing'&&trialDaysLeft>0&&<div className="trial-banner">
-          <Clock3 size={18}/><span><strong>Teste grátis ativo:</strong> {trialDaysLeft} {trialDaysLeft===1?'dia restante':'dias restantes'}.
-          Aproveite para cadastrar clientes e experimentar o sistema.</span>
+        {isTrial&&trialDaysLeft>0&&<div className="trial-banner" role="status">
+          <Clock3 size={20}/><span><strong>Sua conta está no período de teste gratuito.</strong>
+          <span className="trial-subline">Faltam {trialDaysLeft} {trialDaysLeft===1?'dia':'dias'} para o término. Você pode cadastrar até {trialClientLimit} clientes e criar até 3 cobranças, com PDFs personalizados. Os disparos automáticos via WhatsApp não estão disponíveis neste período.</span></span>
           <a href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Quero%20contratar%20o%20ContabFlow."
-            target="_blank" rel="noopener noreferrer">Conhecer planos</a>
+            target="_blank" rel="noopener noreferrer">Desbloquear plano</a>
         </div>}
         {demo&&<div className="demo-banner"><div><CircleHelp size={18}/><span><strong>Modo demonstração.</strong> Os exemplos são fictícios; alterações ficam apenas neste navegador. Para usar em produção, conecte o Supabase.</span></div><span className="demo-tag">DEMO</span></div>}
         {(toast||error)&&<div className={'notice '+(error?'danger':'ok')}><span>{error||toast}</span><button onClick={()=>{setToast('');setError('');}} aria-label="Dispensar"><X size={16}/></button></div>}
@@ -512,10 +522,25 @@ export default function App() {
             page==='obligations'?'Gere PDFs individuais de cobrança com valor, vencimento e dados do cliente.':
             page==='automations'?'Configure seu fluxo de lembretes e acompanhe as notificações.':
             'Personalize os dados e a comunicação do seu escritório.'}</p></div>
-          {page==='clients'&&<button className="btn primary" onClick={()=>showClient()}><Plus size={17}/>Novo cliente</button>}
-          {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length}><Plus size={17}/>Nova cobrança</button>}
+          {page==='clients'&&<button className="btn primary" onClick={()=>showClient()} disabled={!canAddTrialClient} title={!canAddTrialClient?'Limite do período de teste atingido':''}><Plus size={17}/>Novo cliente</button>}
+          {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length||!canAddTrialCharge} title={!canAddTrialCharge?'Limite de 3 cobranças do teste atingido':''}><Plus size={17}/>Nova cobrança</button>}
         </div>
 
+        {page==='overview'&&isTrial&&<section className="trial-guide">
+          <div className="trial-guide-heading"><div><p className="eyebrow">APROVEITE SEU TESTE</p><h2>Conheça o ContabFlow em 3 passos</h2></div><span>7 dias para experimentar</span></div>
+          <div className="trial-guide-grid">
+            <div><Users size={19}/><strong>1. Cadastre clientes</strong><p>{clients.length} de {trialClientLimit} permitidos no teste.</p>
+              <progress value={Math.min(clients.length,trialClientLimit)} max={trialClientLimit}/>
+              <button onClick={()=>setPage('clients')}>Ir para clientes</button></div>
+            <div><FileText size={19}/><strong>2. Crie documentos</strong><p>{obligations.length} de 3 cobranças permitidas no teste.</p>
+              <progress value={Math.min(obligations.length,3)} max={3}/>
+              <button onClick={()=>setPage('obligations')}>Ir para cobranças</button></div>
+            <div><Sparkles size={19}/><strong>3. Explore as possibilidades</strong>
+              <p>Teste os PDFs e organize vencimentos. Tutoriais e novas soluções serão disponibilizados futuramente.</p>
+              <a target="_blank" rel="noopener noreferrer" href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Tenho%20interesse%20no%20ContabFlow.">Conversar sobre planos</a></div>
+          </div>
+          <p className="trial-guide-foot">Durante a avaliação: até {trialClientLimit} clientes cadastrados e 3 cobranças; sem disparos automáticos. Seus dados permanecem vinculados ao escritório se você contratar.</p>
+        </section>}
         {page==='overview'&&<>
           <div className="metric-grid">
             <div className="metric-card"><span className="metric-head">Clientes ativos <Users size={19}/></span><strong>{clients.filter(c=>c.active).length}</strong><span className="metric-foot"><span className="small-green"><TrendingUp size={14}/></span>Na sua carteira</span></div>
