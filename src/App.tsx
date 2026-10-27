@@ -160,7 +160,7 @@ export default function App() {
           org=previous.data as typeof org;orgError=previous.error as typeof orgError;
         }
         if(orgError)throw orgError;
-        if(valid){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
+        if(valid&&org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
       } catch(err) { if(valid)setError(String(err)); }
     })();
     return()=>{valid=false;};
