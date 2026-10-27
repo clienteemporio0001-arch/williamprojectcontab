@@ -8,7 +8,7 @@ export type TrialSettings={
 export const DEFAULT_TRIAL:TrialSettings={
   trial_enabled:false,
   trial_days:7,
-  trial_max_clients:10,
+  trial_max_clients:3,
   trial_title:'Teste o ContabFlow gratuitamente',
   trial_description:'Automatize seus honorários e conheça a plataforma antes de contratar.'
 };
