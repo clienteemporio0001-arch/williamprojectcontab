@@ -98,3 +98,17 @@
   .auth-card.auth-card-signup .brand{margin-bottom:6px}
   .auth-card.auth-card-signup .gap-lg{gap:6px}
 }
+
+/* Landing, avaliação e suporte público */
+.public-back{display:block;margin:12px auto 0;border:0;background:transparent;color:#7bdac3;font-size:11px;font-weight:700}
+.public-back:hover{text-decoration:underline}
+.workspace-trial-info{color:#82d9ba;background:#15352f;border:1px solid #2c6756;padding:12px;border-radius:9px;font-size:11px;line-height:1.6}
+.trial-banner{display:flex;align-items:center;gap:13px;padding:12px 16px;margin-bottom:17px;border:1px solid #2c6559;border-radius:10px;background:#173832;color:#b7eee0;font-size:12px;line-height:1.6}
+.trial-banner svg{color:#62ebc5;flex-shrink:0}
+.trial-banner span{flex:1}.trial-banner a{white-space:nowrap;font-weight:800;color:#6df5cc}
+.access-locked{min-height:100vh;background:radial-gradient(circle at 55% 25%,#1b4c4a,#0d1729 66%);display:grid;place-items:center;padding:20px}
+.access-locked-card{max-width:510px;width:100%;padding:40px;background:#142236;border-radius:17px;border:1px solid #34516a;display:grid;justify-items:start;gap:19px}
+.access-locked-card>svg{color:#6ce3c1}.access-locked-card h1{font-family:Manrope,sans-serif;font-size:27px;margin:0}
+.access-locked-card p{color:#a5bdcd;font-size:13px;line-height:1.9;margin:0}
+.access-locked-card .btn{min-width:190px;display:flex;justify-content:center;padding:13px 17px}
+@media(max-width:700px){.trial-banner{flex-wrap:wrap;gap:9px}.trial-banner a{margin-left:27px}}
