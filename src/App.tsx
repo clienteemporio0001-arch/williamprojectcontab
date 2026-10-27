@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
+import MarketingLanding from './MarketingLanding';
+import WhatsAppSupport from './WhatsAppSupport';
+import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
 import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from './lib/registration';
 import {
   type Client, type Obligation, type ReminderLog, DEFAULT_TEMPLATE,
@@ -16,7 +19,7 @@ import {
 } from './lib/types';
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
-type Workspace = { id: string; name: string; message_template: string; tax_id:string;pix_key:string;billing_contact:string };
+type Workspace = {id:string;name:string;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
 
@@ -67,6 +70,9 @@ export default function App() {
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
+  const [publicScreen,setPublicScreen] = useState<'landing'|'auth'>('landing');
+  const [trialSettings,setTrialSettings] = useState<TrialSettings>(DEFAULT_TRIAL);
+  const [nowTick,setNowTick] = useState(Date.now());
   const [masterStatus,setMasterStatus] = useState<'checking'|'yes'|'no'>(supabase?'checking':'no');
   const [masterView,setMasterView] = useState(true);
   const [loading,setLoading] = useState(false);
@@ -90,6 +96,20 @@ export default function App() {
   const [toast,setToast] = useState('');
   const [error,setError] = useState('');
 
+  useEffect(()=>{
+    const timer=window.setInterval(()=>setNowTick(Date.now()),60000);
+    return()=>window.clearInterval(timer);
+  },[]);
+  useEffect(()=>{
+    if(!supabase)return;
+    let live=true;
+    void supabase.from('saas_trial_settings')
+      .select('trial_enabled,trial_days,trial_max_clients,trial_title,trial_description')
+      .eq('id',1).single().then(({data,error:e})=>{
+        if(live&&!e&&data)setTrialSettings(data as TrialSettings);
+      });
+    return()=>{live=false;};
+  },[]);
   useEffect(() => {
     if(!demo) return;
     localStorage.setItem('contabflow_clients_v1',JSON.stringify(clients));
@@ -130,9 +150,16 @@ export default function App() {
           .select('org_id').eq('user_id',session.user.id).limit(1).maybeSingle();
         if(e) throw e;
         if(!membership) {if(valid)setWorkspace(null);return;}
-        const {data:org,error:orgError}=await s.from('organizations')
-          .select('id,name,message_template,tax_id,pix_key,billing_contact').eq('id',membership.org_id).single();
-        if(orgError) throw orgError;
+        let {data:org,error:orgError}=await s.from('organizations')
+          .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
+          .eq('id',membership.org_id).single();
+        if(orgError?.code==='42703'){
+          const previous=await s.from('organizations')
+            .select('id,name,message_template,tax_id,pix_key,billing_contact')
+            .eq('id',membership.org_id).single();
+          org=previous.data as typeof org;orgError=previous.error as typeof orgError;
+        }
+        if(orgError)throw orgError;
         if(valid){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
       } catch(err) { if(valid)setError(String(err)); }
     })();
@@ -295,9 +322,15 @@ export default function App() {
         }).eq('id',newId);
       if(updateError)setError('Escritório criado, mas os dados fiscais precisam ser conferidos em Configurações: '+updateError.message);
     }
-    const {data:org, error:fetchError}=await supabase.from('organizations')
-      .select('id,name,message_template,tax_id,pix_key,billing_contact')
+    let {data:org, error:fetchError}=await supabase.from('organizations')
+      .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
       .eq('id',newId).single();
+    if(fetchError?.code==='42703'){
+      const previous=await supabase.from('organizations')
+        .select('id,name,message_template,tax_id,pix_key,billing_contact')
+        .eq('id',newId).single();
+      org=previous.data as typeof org;fetchError=previous.error as typeof fetchError;
+    }
     if(fetchError)setError('Escritório criado. Atualize a página para entrar: '+fetchError.message);
     else if(org){
       setWorkspace(org as Workspace);
@@ -363,6 +396,9 @@ export default function App() {
   const visibleClients=clients.filter(c=>[c.name,c.company,c.phone].join(' ').toLowerCase().includes(search.toLowerCase()));
   const nextFive=ordered.filter(o=>o.status==='pending').slice(0,5);
   const orgLabel=workspace?.name || workspaceName;
+  const workspaceAllowed=demo||!workspace||(!workspace.billing_status&&workspace.access_status!=='suspended')||
+    isWorkspaceAllowed(workspace.access_status,workspace.billing_status,workspace.trial_ends_at||null,nowTick);
+  const trialDaysLeft=workspace?.billing_status==='trialing'?remainingTrialDays(workspace.trial_ends_at||null,nowTick):0;
   const passwordMatch = authPasswordConfirm.length > 0 && authPassword === authPasswordConfirm;
   const passwordMismatch = authPasswordConfirm.length > 0 && authPassword !== authPasswordConfirm;
 
