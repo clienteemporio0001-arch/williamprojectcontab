@@ -26,7 +26,7 @@ const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;acce
   :o.billing_status==='active'?'Assinatura liberada':'Sem escritório';
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
- const [tab,setTab]=useState<'home'|'offices'|'plans'|'trial'|'monitor'>('home');
+ const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'>('home');
  const [data,setData]=useState<Data>({organizations:[],plans:[]});
  const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
  const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
@@ -158,7 +158,6 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   <button className={tab==='home'?'current':''} onClick={()=>setTab('home')}><Wallet size={18}/>Visão geral</button>
   <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length}</small></button>
   <button className={tab==='plans'?'current':''} onClick={()=>setTab('plans')}><Settings2 size={18}/>Planos SaaS</button>
-  <button className={tab==='trial'?'current':''} onClick={()=>setTab('trial')}><Clock3 size={18}/>Teste grátis <small>{trialOffices.length}</small></button>
   <button className={tab==='monitor'?'current':''} onClick={()=>setTab('monitor')}><Activity size={18}/>Cadastros e atividades <small>{pendingSignups.length}</small></button>
   <div className="master-sidefoot"><div><LockKeyhole size={17}/> Área restrita ao administrador da plataforma</div>
    {canOpenOffice&&<button onClick={onOpenOffice}><Building2 size={17}/>Painel do contador</button>}
@@ -166,13 +165,13 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   </div></aside>
   <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>{void reload();void loadMonitor();}}><RefreshCw size={16}/>Atualizar</button></header>
    <div className="master-inner"><p className="master-eyebrow">PAINEL ADMINISTRATIVO</p>
-    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e limites':tab==='trial'?'Período de teste':'Cadastros e atividades'}</h1>
-    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Preços configurados para o SaaS (não significam pagamentos recebidos).':tab==='trial'?'Personalize a duração, o limite e acompanhe os novos escritórios.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
+    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e teste grátis':'Cadastros e atividades'}</h1>
+    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Edite os valores e personalize o teste gratuito dos planos.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
     {error&&<div className="master-alert">{error}</div>}{notice&&<div className="master-alert success">{notice}</div>}
     {busy&&<p className="master-loading">Atualizando informações…</p>}
     {tab==='home'&&<>
      <div className="master-trial-pulse">
-       <button onClick={()=>setTab('trial')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
+       <button onClick={()=>setTab('plans')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
        <button onClick={()=>setTab('trial')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Cadastros sem escritório <strong>{pendingSignups.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><Activity size={17}/> Ações recentes <strong>{monitor.activities.length}</strong></button>
@@ -196,52 +195,6 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  :o.billing_status==='pending'?'Aguardando liberação':'Assinatura liberada'}</small></td>
  <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
      {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
-    </section>}
-    {tab==='trial'&&<section className="master-panel master-trial">
-      <div className="master-panelhead"><h2>Oferta de teste grátis</h2><Clock3 size={19}/></div>
-      <div className="master-trial-content">
-        <p className="master-trial-intro">O prazo começa quando o escritório é criado. Após o vencimento, a plataforma bloqueia clientes e cobranças até você prorrogar o teste ou liberar a assinatura.</p>
-        <div className="master-trial-stats">
-          <div><strong>{runningTrials.length}</strong><span>Em teste</span></div>
-          <div><strong>{expiredTrials.length}</strong><span>Vencidos</span></div>
-          <div><strong>{monitor.registrations.filter(r=>!r.verified).length}</strong><span>E-mail pendente</span></div>
-          <div><strong>{pendingSignups.length}</strong><span>Sem escritório</span></div>
-        </div>
-        {trialError&&<div className="master-alert" role="alert">{trialError}</div>}
-        <label className="master-trial-switch"><input type="checkbox" disabled={!trialAvailable||trialBusy} checked={trial.trial_enabled}
-          onChange={e=>setTrial(p=>({...p,trial_enabled:e.target.checked}))}/>
-          <span><strong>Oferecer teste gratuito a novos escritórios</strong><small>Se desativado, novos escritórios aguardam sua liberação.</small></span>
-        </label>
-        <div className="master-trial-cols">
-          <label>Duração do teste (dias)<input type="number" min={1} max={90} step={1} disabled={!trialAvailable||trialBusy}
-            value={trial.trial_days} onChange={e=>setTrial(p=>({...p,trial_days:Number(e.target.value)}))}/></label>
-          <label>Máximo de clientes durante o teste<input type="number" min={1} max={300} step={1} disabled={!trialAvailable||trialBusy}
-            value={trial.trial_max_clients} onChange={e=>setTrial(p=>({...p,trial_max_clients:Number(e.target.value)}))}/></label>
-        </div>
-        <label>Título público do teste<input type="text" maxLength={100} disabled={!trialAvailable||trialBusy}
-          value={trial.trial_title} onChange={e=>setTrial(p=>({...p,trial_title:e.target.value}))}/></label>
-        <label>Descrição da oferta<textarea rows={3} maxLength={300} disabled={!trialAvailable||trialBusy}
-          value={trial.trial_description} onChange={e=>setTrial(p=>({...p,trial_description:e.target.value}))}/></label>
-        <p className="master-hint">Alterar a duração afeta somente novos escritórios. Alterar o limite de clientes afeta todos os testes em andamento. A cobrança mensal não é automática nesta versão.</p>
-        <button className="master-trial-save" disabled={!trialAvailable||trialBusy} onClick={()=>void saveTrial()}>
-          {trialBusy?'Salvando…':'Salvar alterações do teste'}
-        </button>
-      </div>
-      <div className="master-trial-table">
-        <div className="master-panelhead"><h2>Escritórios no período de teste</h2>
-          <button onClick={()=>setTab('monitor')}>Ver todos os cadastros</button></div>
-        <div className="master-tablewrap"><table>
-          <thead><tr><th>ESCRITÓRIO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th>VENCIMENTO</th><th></th></tr></thead>
-          <tbody>{trialOffices.map(o=><tr key={o.id}>
-            <td><strong>{o.name}</strong><small>{o.owner_email||'Sem responsável'}</small></td>
-            <td>{o.clients_active}/{trial.trial_max_clients}</td><td>{o.charges_total}/3</td>
-            <td><span className="master-trial-status trial">{trialLabel(o)}</span></td>
-            <td>{o.trial_ends_at?timestamp(o.trial_ends_at):'Sem data'}</td>
-            <td><button onClick={()=>begin(o)}>Gerenciar</button></td>
-          </tr>)}
-          {!trialOffices.length&&<tr><td colSpan={6}>Nenhum escritório em avaliação ainda.</td></tr>}</tbody>
-        </table></div>
-      </div>
     </section>}
     {tab==='monitor'&&<div className="master-monitor">
       {monitorError&&<div className="master-alert">{monitorError}</div>}
@@ -286,6 +239,58 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
       </section>
     </div>}
     {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p><button type="button" className="master-price-edit" disabled={busy} onClick={()=>beginPrice(p)}><Pencil size={16}/> Alterar valor</button></article>)}</div>}
+    {tab==='plans'&&<section className="master-panel master-trial">
+      <div className="master-panelhead"><h2>Oferta de teste grátis</h2><Clock3 size={19}/></div>
+      <div className="master-trial-content">
+        <p className="master-trial-intro">O prazo começa quando o escritório é criado. Após o vencimento, a plataforma bloqueia clientes e cobranças até você prorrogar o teste ou liberar a assinatura.</p>
+        <div className="master-trial-stats">
+          <div><strong>{runningTrials.length}</strong><span>Em teste</span></div>
+          <div><strong>{expiredTrials.length}</strong><span>Vencidos</span></div>
+          <div><strong>{monitor.registrations.filter(r=>!r.verified).length}</strong><span>E-mail pendente</span></div>
+          <div><strong>{pendingSignups.length}</strong><span>Sem escritório</span></div>
+        </div>
+        {trialError&&<div className="master-alert" role="alert">{trialError}</div>}
+        <label className="master-trial-switch"><input type="checkbox" disabled={!trialAvailable||trialBusy} checked={trial.trial_enabled}
+          onChange={e=>setTrial(p=>({...p,trial_enabled:e.target.checked}))}/>
+          <span><strong>Oferecer teste gratuito a novos escritórios</strong><small>Se desativado, novos escritórios aguardam sua liberação.</small></span>
+        </label>
+        <div className="master-trial-cols">
+          <label>Duração do teste (dias)
+            <div className="master-trial-presets">{[1,3,7].map(days=><button key={days} type="button"
+              className={trial.trial_days===days?'chosen':''} disabled={!trialAvailable||trialBusy}
+              onClick={()=>setTrial(p=>({...p,trial_days:days}))}>{days} {days===1?'dia':'dias'}</button>)}</div>
+            <input type="number" min={1} max={90} step={1} disabled={!trialAvailable||trialBusy}
+              value={trial.trial_days} onChange={e=>setTrial(p=>({...p,trial_days:Number(e.target.value)}))}/>
+          </label>
+          <label>Máximo de clientes durante o teste<input type="number" min={1} max={300} step={1} disabled={!trialAvailable||trialBusy}
+            value={trial.trial_max_clients} onChange={e=>setTrial(p=>({...p,trial_max_clients:Number(e.target.value)}))}/></label>
+        </div>
+        <label>Título público do teste<input type="text" maxLength={100} disabled={!trialAvailable||trialBusy}
+          value={trial.trial_title} onChange={e=>setTrial(p=>({...p,trial_title:e.target.value}))}/></label>
+        <label>Descrição da oferta<textarea rows={3} maxLength={300} disabled={!trialAvailable||trialBusy}
+          value={trial.trial_description} onChange={e=>setTrial(p=>({...p,trial_description:e.target.value}))}/></label>
+        <p className="master-hint">Alterar a duração afeta somente novos escritórios. Alterar o limite de clientes afeta todos os testes em andamento. A cobrança mensal não é automática nesta versão.</p>
+        <button className="master-trial-save" disabled={!trialAvailable||trialBusy} onClick={()=>void saveTrial()}>
+          {trialBusy?'Salvando…':'Salvar alterações do teste'}
+        </button>
+      </div>
+      <div className="master-trial-table">
+        <div className="master-panelhead"><h2>Escritórios no período de teste</h2>
+          <button onClick={()=>setTab('monitor')}>Ver todos os cadastros</button></div>
+        <div className="master-tablewrap"><table>
+          <thead><tr><th>ESCRITÓRIO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th>VENCIMENTO</th><th></th></tr></thead>
+          <tbody>{trialOffices.map(o=><tr key={o.id}>
+            <td><strong>{o.name}</strong><small>{o.owner_email||'Sem responsável'}</small></td>
+            <td>{o.clients_active}/{trial.trial_max_clients}</td><td>{o.charges_total}/3</td>
+            <td><span className="master-trial-status trial">{trialLabel(o)}</span></td>
+            <td>{o.trial_ends_at?timestamp(o.trial_ends_at):'Sem data'}</td>
+            <td><button onClick={()=>begin(o)}>Gerenciar</button></td>
+          </tr>)}
+          {!trialOffices.length&&<tr><td colSpan={6}>Nenhum escritório em avaliação ainda.</td></tr>}</tbody>
+        </table></div>
+      </div>
+    </section>}
+
    </div>
   </main>
   {editPrice&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!busy)setEditPrice(null);}}>
