@@ -15,6 +15,12 @@ CREATE TABLE public.saas_trial_settings (
   updated_by uuid REFERENCES auth.users(id)
 );
 INSERT INTO public.saas_trial_settings(id) VALUES(1) ON CONFLICT(id) DO NOTHING;
+-- Planos e valores são informações públicas na landing page.
+DROP POLICY IF EXISTS subscription_plans_public_read ON public.subscription_plans;
+CREATE POLICY subscription_plans_public_read
+  ON public.subscription_plans FOR SELECT TO anon USING(true);
+GRANT SELECT ON public.subscription_plans TO anon;
+
 ALTER TABLE public.saas_trial_settings ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS saas_trial_settings_public_read ON public.saas_trial_settings;
 CREATE POLICY saas_trial_settings_public_read
