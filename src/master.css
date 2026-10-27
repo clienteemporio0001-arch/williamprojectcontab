@@ -90,3 +90,30 @@
 .master-trial-actions button:last-child{background:#50d7b2;color:#053325}
 .master-mark-pending{border-color:#8f5b63;background:#472b32;color:#f8c1bf}
 @media(max-width:690px){.master-trial-content{padding:16px}.master-trial-cols{grid-template-columns:1fr}}
+
+/* Admin Master: cadastrados, testes e atividade */
+.master-trial-pulse,.master-trial-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:8px 0 20px}
+.master-trial-pulse>button{min-height:78px;border:1px solid #35556a;border-radius:10px;background:#172c3d;color:#9fc5cc;padding:13px;display:flex;align-items:center;gap:8px;text-align:left;font-size:11px}
+.master-trial-pulse>button svg{color:#63e6c3;flex-shrink:0}.master-trial-pulse>button strong{margin-left:auto;font-size:22px;color:#e8fff6}
+.master-trial-stats>div{border:1px solid #33566b;background:#132b38;border-radius:10px;padding:15px;display:grid;gap:6px}
+.master-trial-stats strong{font-size:24px;color:#72ecc9}.master-trial-stats span{font-size:11px;color:#a6becc}
+.master-trial-table{margin:0 24px 24px;border-top:1px solid #345064;padding-top:15px}
+.master-trial-table .master-panelhead{padding:8px 0 16px}
+.master-trial-status{display:inline-flex;color:#b7e3dc;background:#253f4c;padding:5px 8px;border-radius:7px;font-size:10px;font-weight:700}
+.master-trial-status.trial{color:#77edd1;background:#1b5144}
+.master-monitor{display:grid;gap:18px}
+.master-monitor-tools{display:flex;align-items:end;gap:13px;flex-wrap:wrap}
+.master-monitor-tools>label{display:grid;gap:6px;font-size:11px;font-weight:700;color:#a9c4cf}
+.master-monitor-tools select{min-width:260px;padding:11px;background:#13263b;border:1px solid #36556a;border-radius:8px;color:#e8f6f4}
+.master-monitor-tools button{display:flex;align-items:center;gap:8px;background:#1f5144;color:#96f1d3;border:1px solid #367b66;border-radius:8px;padding:11px 14px;font-weight:800;font-size:11px}
+.master-monitor .master-panelhead>span{font-size:10px;color:#91b0be}
+.master-activity-list{max-height:390px;overflow-y:auto}
+.master-activity-item{display:flex;align-items:center;gap:13px;border-bottom:1px solid #2c3e50;padding:15px 20px}
+.master-activity-item>svg{color:#70e2c2;flex-shrink:0}
+.master-activity-item>div{display:grid;gap:5px;min-width:0;flex:1}
+.master-activity-item strong{font-size:12px;color:#e4f4f3}.master-activity-item small{font-size:10px;color:#8eafbf}
+.master-activity-item time{font-size:10px;color:#91acbc;white-space:nowrap}
+.master-activity-note{margin:12px 16px 16px}
+.master-monitor .master-tablewrap small{display:block;color:#8daabb;font-size:10px;margin-top:5px}
+@media(max-width:1000px){.master-trial-pulse,.master-trial-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.master-trial-pulse,.master-trial-stats{grid-template-columns:1fr 1fr}.master-trial-table{margin:0 14px 18px}.master-monitor-tools select{min-width:100%}.master-activity-item time{font-size:9px}}
