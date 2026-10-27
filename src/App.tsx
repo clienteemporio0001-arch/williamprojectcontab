@@ -403,7 +403,13 @@ export default function App() {
   const passwordMismatch = authPasswordConfirm.length > 0 && authPassword !== authPasswordConfirm;
 
   if(checkingAuth)return <div className="splash"><div className="logo-mark"><CalendarClock size={30}/></div><p>Preparando seu painel…</p></div>;
-  if(!demo&&!session)return <div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
+  if(!demo&&!session&&publicScreen==='landing')return <>
+    <MarketingLanding trial={trialSettings}
+      onLogin={()=>{setAuthMode('login');setPublicScreen('auth');setError('');}}
+      onSignup={()=>{setAuthMode('signup');setPublicScreen('auth');setError('');}}/>
+    <WhatsAppSupport/>
+  </>;
+  if(!demo&&!session)return <><div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
     <div className="brand"><span className="logo-mark"><CalendarClock size={24}/></span><span>contab<span className="brand-accent">flow</span><small>GESTÃO CONTÁBIL INTELIGENTE</small></span></div>
     <div className="auth-kicker">SEU ESCRITÓRIO MAIS PRODUTIVO</div>
     <h1>{authMode==='login'?'Bem-vindo de volta':'Crie sua conta de contador'}</h1>
@@ -449,16 +455,29 @@ export default function App() {
       <button disabled={saving||(authMode==='signup'&&(!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
     </form>
     <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');setShowPassword(false);setShowConfirmPassword(false);}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
-  </div></div>;
+    <button type="button" className="public-back" onClick={()=>setPublicScreen('landing')}>← Voltar ao início</button>
+  </div></div><WhatsAppSupport/></>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
-  if(!demo&&!workspace)return <div className="auth-wrap"><div className="auth-card">
+  if(!demo&&!workspace)return <><div className="auth-wrap"><div className="auth-card">
     <div className="brand"><span className="logo-mark"><Building2/></span><span>contab<span className="brand-accent">flow</span></span></div>
     <h1>Vamos criar seu escritório</h1><p className="subtle">Os dados ficarão separados dos demais escritórios da plataforma.</p>
     <form onSubmit={makeWorkspace} className="stack gap-lg"><label>Nome do escritório<input required minLength={2} value={newWorkspace} onChange={e=>setNewWorkspace(e.target.value)} placeholder="Ex.: Contabilidade Exemplo"/></label>
+      {trialSettings.trial_enabled&&<p className="workspace-trial-info">Seu teste de {trialSettings.trial_days} dias começará após criar este escritório. Você poderá cadastrar até {trialSettings.trial_max_clients} clientes ativos durante a avaliação.</p>}
       {error&&<p className="form-error">{error}</p>}<button className="btn primary block" disabled={saving}>Criar espaço de trabalho</button></form>
-  </div></div>;
+  </div></div><WhatsAppSupport/></>;
 
+  if(!demo&&workspace&&!workspaceAllowed&&masterStatus!=='yes')return <>
+    <div className="access-locked"><div className="access-locked-card">
+      <ShieldCheck size={37}/>
+      <h1>{workspace.access_status==='suspended'?'Escritório temporariamente suspenso':
+        workspace.billing_status==='pending'?'Aguardando liberação do seu escritório':'Seu teste grátis terminou'}</h1>
+      <p>Os dados do seu escritório continuam armazenados. Para retomar o acesso e as cobranças, entre em contato e solicite a ativação do plano.</p>
+      <a href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Quero%20contratar%20o%20ContabFlow."
+        target="_blank" rel="noopener noreferrer" className="btn primary">Conversar pelo WhatsApp</a>
+      <button className="btn soft" onClick={()=>{if(supabase)void supabase.auth.signOut();}}>Sair</button>
+    </div></div><WhatsAppSupport/>
+  </>;
   const title={overview:'Visão geral',clients:'Clientes',obligations:'Cobranças',automations:'Automações',settings:'Configurações'}[page];
   return <div className="app-shell">
     <aside className={'sidebar '+(menuOpen?'mobile-open':'')}>
@@ -478,6 +497,12 @@ export default function App() {
         <div className="top-right"><span className="today-pill"><Clock3 size={15}/>{new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(new Date())}</span><span className="mini-avatar">{orgLabel[0]?.toUpperCase()||'C'}</span></div>
       </header>
       <div className="main-content">
+        {!demo&&workspace?.billing_status==='trialing'&&trialDaysLeft>0&&<div className="trial-banner">
+          <Clock3 size={18}/><span><strong>Teste grátis ativo:</strong> {trialDaysLeft} {trialDaysLeft===1?'dia restante':'dias restantes'}.
+          Aproveite para cadastrar clientes e experimentar o sistema.</span>
+          <a href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Quero%20contratar%20o%20ContabFlow."
+            target="_blank" rel="noopener noreferrer">Conhecer planos</a>
+        </div>}
         {demo&&<div className="demo-banner"><div><CircleHelp size={18}/><span><strong>Modo demonstração.</strong> Os exemplos são fictícios; alterações ficam apenas neste navegador. Para usar em produção, conecte o Supabase.</span></div><span className="demo-tag">DEMO</span></div>}
         {(toast||error)&&<div className={'notice '+(error?'danger':'ok')}><span>{error||toast}</span><button onClick={()=>{setToast('');setError('');}} aria-label="Dispensar"><X size={16}/></button></div>}
         {loading&&<div className="loadingbar"/>}
@@ -576,5 +601,6 @@ export default function App() {
           {error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="btn soft" onClick={closeModal}>Cancelar</button><button disabled={saving} className="btn primary">{saving?'Salvando…':'Salvar obrigação'}</button></div></form>}
       </div>
     </div>}
+    <WhatsAppSupport/>
   </div>;
 }
