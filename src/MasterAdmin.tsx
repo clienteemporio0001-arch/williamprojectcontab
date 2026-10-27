@@ -9,7 +9,7 @@ type Plan={code:string;name:string;client_limit:number;monthly_price_brl:number}
 type Office={id:string;name:string;created_at:string;owner_email:string|null;plan_code:string;plan_name:string;access_status:'active'|'suspended';client_limit:number;monthly_price_brl:number;clients_active:number;charges_total:number;notifications_accepted:number;billing_status?:'active'|'trialing'|'pending';trial_started_at?:string|null;trial_ends_at?:string|null};
 type Data={organizations:Office[];plans:Plan[]};
 type Props={canOpenOffice:boolean;onOpenOffice:()=>void};
-type Signup={user_id:string;email:string|null;full_name:string|null;declared_office_name:string|null;registered_at:string;verified:boolean;last_sign_in_at:string|null;org_id:string|null;office_name:string|null;billing_status:'active'|'trialing'|'pending'|null;access_status:string|null;trial_ends_at:string|null};
+type Signup={user_id:string;email:string|null;full_name:string|null;declared_office_name:string|null;registered_at:string;verified:boolean;last_sign_in_at:string|null;org_id:string|null;office_name:string|null;billing_status:'active'|'trialing'|'pending'|null;access_status:string|null;trial_ends_at:string|null;selected_plan_code?:string|null;plan_code?:string|null};
 type MonitorEvent={id:number;org_id:string;actor_user_id:string|null;event_type:string;entity_id:string|null;occurred_at:string;office_name:string};
 type MonitorData={registrations:Signup[];activities:MonitorEvent[]};
 const EVENT_LABELS:Record<string,string>={
@@ -210,11 +210,12 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
       <section className="master-panel">
         <div className="master-panelhead"><h2>Cadastros na plataforma ({filteredRegistrations.length})</h2><span>Inclui quem ainda não confirmou o e-mail ou criou escritório</span></div>
         <div className="master-tablewrap"><table>
-          <thead><tr><th>RESPONSÁVEL</th><th>ESCRITÓRIO</th><th>CADASTRADO EM</th><th>E-MAIL</th><th>SITUAÇÃO</th><th>ÚLTIMO LOGIN</th></tr></thead>
+          <thead><tr><th>RESPONSÁVEL</th><th>ESCRITÓRIO</th><th>PLANO ESCOLHIDO</th><th>CADASTRADO EM</th><th>E-MAIL</th><th>SITUAÇÃO</th><th>ÚLTIMO LOGIN</th></tr></thead>
           <tbody>
             {filteredRegistrations.map(r=><tr key={r.user_id}>
               <td><strong>{r.full_name||'Nome não informado'}</strong><small>{r.email||'Sem e-mail'}</small></td>
               <td>{r.office_name||r.declared_office_name||'Ainda não criou'}</td>
+              <td>{data.plans.find(p=>p.code===(r.plan_code||r.selected_plan_code))?.name||'Não selecionado'}</td>
               <td>{timestamp(r.registered_at)}</td>
               <td>{r.verified?'Confirmado':'Pendente'}</td>
               <td><span className={'master-trial-status '+(r.billing_status==='trialing'?'trial':'')}>
@@ -222,7 +223,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
               </span></td>
               <td>{r.last_sign_in_at?timestamp(r.last_sign_in_at):'Ainda não entrou'}</td>
             </tr>)}
-            {!filteredRegistrations.length&&<tr><td colSpan={6}>Nenhum cadastro encontrado.</td></tr>}
+            {!filteredRegistrations.length&&<tr><td colSpan={7}>Nenhum cadastro encontrado.</td></tr>}
           </tbody>
         </table></div>
       </section>
