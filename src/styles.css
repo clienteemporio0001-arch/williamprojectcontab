@@ -131,3 +131,18 @@
 .trial-guide-grid button,.trial-guide-grid a{border:0;background:transparent;text-align:left;color:#65eac5;font-weight:800;font-size:11px;padding:0}
 .trial-guide-foot{font-size:10px;color:#a5c5cf;margin:18px 0 0;line-height:1.6}
 @media(max-width:830px){.trial-guide-grid{grid-template-columns:1fr}.trial-guide-grid p{min-height:0}.trial-guide-heading{flex-wrap:wrap}}
+
+/* Cadastro com plano escolhido: sem aumentar excessivamente a altura */
+.auth-card.auth-card-signup .signup-plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.signup-plan-option{display:grid;align-content:start;gap:5px;min-height:88px;padding:10px;
+  border:1px solid #345064;border-radius:9px;background:#102337;cursor:pointer}
+.signup-plan-option.selected{border:1px solid #54e3bc;background:#174037;box-shadow:inset 0 0 0 1px #54e3bc}
+.signup-plan-option>input{accent-color:#50dabc;height:15px;width:15px;justify-self:start}
+.signup-plan-option>span{display:grid;gap:4px;min-width:0}
+.signup-plan-option>span strong{font-size:11px;line-height:1.25;color:#e9f9f4}
+.signup-plan-option>span small{font-size:9px;line-height:1.35;color:#9abcca}
+.signup-plan-option b{font-size:13px;color:#73ebc5;line-height:1.2}.signup-plan-option b small{font-size:9px;color:#a6b8c9}
+.signup-trial-note{margin:0;padding:9px 11px;background:#174034;border:1px solid #36775c;color:#b4f5db;border-radius:8px;font-size:10px;line-height:1.5}
+.workspace-chosen-plan{background:#153b36;border:1px solid #34836b;border-radius:10px;padding:14px;display:grid;gap:5px;margin:14px 0}
+.workspace-chosen-plan strong{font-size:13px;color:#bff8e8}.workspace-chosen-plan span{font-size:11px;color:#91c6bb}
+@media(max-width:600px){.auth-card.auth-card-signup .signup-plan-grid{grid-template-columns:1fr}.signup-plan-option{min-height:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}.signup-plan-option>span{flex:1}.signup-plan-option b{margin-left:auto}}
