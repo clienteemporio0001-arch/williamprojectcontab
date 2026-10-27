@@ -43,11 +43,6 @@
 .password-check .password-pending{color:#92adc1}
 .password-field input[aria-invalid="true"]{border-color:#d07575}
 
-.auth-connection-test{display:block;width:100%;margin:13px auto 5px;padding:9px 12px;border:1px solid #2f5662;border-radius:9px;background:#142b36;color:#8fe3cc;font-size:11px;font-weight:800;cursor:pointer}
-.auth-connection-test:hover{background:#1a3a43;color:#b7f9e4}
-.auth-connection-test:disabled{opacity:.6;cursor:wait}
-.auth-connection-test:focus-visible{outline:2px solid #59e4bf;outline-offset:2px}
-.auth-connection-failed{background:#422832;border-color:#92505a;color:#ffd6cd}
 
 /* Cadastro compacto: todos os dados em uma única visão no desktop */
 .auth-card.auth-card-signup{
@@ -83,7 +78,6 @@
 .auth-card.auth-card-signup .password-field .password-toggle svg{width:17px;height:17px}
 .auth-card.auth-card-signup .password-field input{padding-right:38px!important}
 .auth-card.auth-card-signup .btn.block{min-height:36px;padding:8px 12px}
-.auth-card.auth-card-signup .auth-connection-test{margin:8px 0 0;padding:7px 10px}
 .auth-card.auth-card-signup .auth-toggle{margin:9px 0 0;font-size:10.5px}
 .auth-card.auth-card-signup .auth-notice{padding:9px 11px;font-size:10px;line-height:1.4}
 .auth-card.auth-card-signup .form-error{margin:0;padding:9px;font-size:10.5px}
