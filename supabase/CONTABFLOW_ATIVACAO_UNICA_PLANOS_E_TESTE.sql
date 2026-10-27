@@ -37,7 +37,7 @@ CREATE POLICY saas_trial_settings_public_read
   ON public.saas_trial_settings FOR SELECT TO anon,authenticated USING(true);
 REVOKE ALL ON public.saas_trial_settings FROM PUBLIC, anon, authenticated;
 -- Expor apenas os campos comerciais; identificador do administrador fica privado.
-GRANT SELECT(trial_enabled,trial_days,trial_max_clients,trial_title,trial_description)
+GRANT SELECT(id,trial_enabled,trial_days,trial_max_clients,trial_title,trial_description)
   ON public.saas_trial_settings TO anon, authenticated;
 
 CREATE TABLE IF NOT EXISTS public.saas_trial_settings_audit (
@@ -665,3 +665,6 @@ COMMIT;
 -- Esperado: Success. No rows returned.
 -- Após executar, teste um cadastro com plano Profissional e confira em
 -- Admin Master > Escritórios se ele ficou vinculado ao Profissional.
+
+-- Atualizar o cache das funções da API após aplicar o SQL.
+NOTIFY pgrst, 'reload schema';
