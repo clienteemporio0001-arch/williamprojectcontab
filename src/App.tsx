@@ -4,7 +4,7 @@ import {
   BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp,
   ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle,
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
-  Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2
+  Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
@@ -74,6 +74,8 @@ export default function App() {
   const [authEmail,setAuthEmail] = useState('');
   const [authPassword,setAuthPassword] = useState('');
   const [authPasswordConfirm,setAuthPasswordConfirm] = useState('');
+  const [showPassword,setShowPassword] = useState(false);
+  const [showConfirmPassword,setShowConfirmPassword] = useState(false);
   const [signupName,setSignupName] = useState('');
   const [signupOffice,setSignupOffice] = useState('');
   const [signupTaxId,setSignupTaxId] = useState('');
@@ -361,6 +363,8 @@ export default function App() {
   const visibleClients=clients.filter(c=>[c.name,c.company,c.phone].join(' ').toLowerCase().includes(search.toLowerCase()));
   const nextFive=ordered.filter(o=>o.status==='pending').slice(0,5);
   const orgLabel=workspace?.name || workspaceName;
+  const passwordMatch = authPasswordConfirm.length > 0 && authPassword === authPasswordConfirm;
+  const passwordMismatch = authPasswordConfirm.length > 0 && authPassword !== authPasswordConfirm;
 
   if(checkingAuth)return <div className="splash"><div className="logo-mark"><CalendarClock size={30}/></div><p>Preparando seu painel…</p></div>;
   if(!demo&&!session)return <div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
@@ -386,15 +390,30 @@ export default function App() {
       </>}
       <label>E-mail *<input type="email" autoComplete="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
       <div className={authMode==='signup'?'register-grid':''}>
-        <label>Senha *<input type="password" autoComplete={authMode==='signup'?'new-password':'current-password'} required minLength={authMode==='signup'?8:6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder={authMode==='signup'?'Mínimo de 8 caracteres':'Sua senha de acesso'}/></label>
-        {authMode==='signup'&&<label>Confirmar senha *<input type="password" required autoComplete="new-password" minLength={8} value={authPasswordConfirm} onChange={e=>setAuthPasswordConfirm(e.target.value)} placeholder="Repita a mesma senha"/></label>}
+        <label>Senha *
+          <span className="password-field">
+            <input type={showPassword?'text':'password'} autoComplete={authMode==='signup'?'new-password':'current-password'} required minLength={authMode==='signup'?8:6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder={authMode==='signup'?'Mínimo de 8 caracteres':'Sua senha de acesso'}/>
+            <button type="button" className="password-toggle" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} title={showPassword?'Ocultar senha':'Mostrar senha'}>{showPassword?<EyeOff size={19}/>:<Eye size={19}/>}</button>
+          </span>
+        </label>
+        {authMode==='signup'&&<label>Confirmar senha *
+          <span className="password-field">
+            <input type={showConfirmPassword?'text':'password'} required autoComplete="new-password" minLength={8} value={authPasswordConfirm} onChange={e=>setAuthPasswordConfirm(e.target.value)} placeholder="Repita a mesma senha" aria-invalid={passwordMismatch}/>
+            <button type="button" className="password-toggle" onClick={()=>setShowConfirmPassword(v=>!v)} aria-label={showConfirmPassword?'Ocultar confirmação de senha':'Mostrar confirmação de senha'} aria-pressed={showConfirmPassword} title={showConfirmPassword?'Ocultar confirmação':'Mostrar confirmação'}>{showConfirmPassword?<EyeOff size={19}/>:<Eye size={19}/>}</button>
+          </span>
+        </label>}
+      </div>
+      {authMode==='signup'&&<div className="password-check" aria-live="polite">
+        {passwordMatch?<span className="password-ok"><CheckCircle2 size={16}/> As senhas coincidem</span>
+          :passwordMismatch?<span className="password-error"><AlertTriangle size={16}/> As senhas não coincidem</span>
+          :<span className="password-pending">Digite a senha novamente para confirmar.</span>}
       </div>
       {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
       {error&&<p role="alert" className="form-error">{error}</p>}
       {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
-      <button disabled={saving} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
+      <button disabled={saving||(authMode==='signup'&&(!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
     </form>
-    <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
+    <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');setShowPassword(false);setShowConfirmPassword(false);}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
   </div></div>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
