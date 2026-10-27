@@ -93,6 +93,30 @@ DROP TRIGGER IF EXISTS obligations_trial_limit ON public.obligations;
 CREATE TRIGGER obligations_trial_limit BEFORE INSERT OR UPDATE ON public.obligations
   FOR EACH ROW EXECUTE FUNCTION public.enforce_trial_charge_limit();
 
+-- O banco também impede que uma função antiga dispare mensagens durante a avaliação:
+-- a rotina de envio deve reservar a tentativa em reminder_logs ANTES do WhatsApp.
+CREATE OR REPLACE FUNCTION public.block_trial_automatic_reminders()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path=public,pg_temp
+AS $
+BEGIN
+  IF NOT EXISTS(
+    SELECT 1 FROM public.organizations o
+      WHERE o.id=NEW.org_id AND o.access_status='active'
+        AND o.billing_status='active'
+  ) THEN
+    RAISE EXCEPTION 'Envio automático indisponível durante avaliação ou acesso bloqueado';
+  END IF;
+  RETURN NEW;
+END;
+$;
+REVOKE ALL ON FUNCTION public.block_trial_automatic_reminders()
+  FROM PUBLIC,anon,authenticated;
+DROP TRIGGER IF EXISTS trial_reminder_guard ON public.reminder_logs;
+CREATE TRIGGER trial_reminder_guard
+  BEFORE INSERT ON public.reminder_logs
+  FOR EACH ROW EXECUTE FUNCTION public.block_trial_automatic_reminders();
+
 -- Eventos não contêm nomes, números ou valores financeiros.
 -- Apenas tipo de ação, escritório, horário e identificador técnico.
 CREATE TABLE public.saas_activity_events (
