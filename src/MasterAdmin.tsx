@@ -1,5 +1,5 @@
 import { useCallback,useEffect,useMemo,useState } from 'react';
-import { Building2,Users,Wallet,ShieldCheck,LogOut,RefreshCw,Search,Settings2,LockKeyhole,CheckCircle2,FileText,Pencil,Clock3 } from 'lucide-react';
+import { Building2,Users,Wallet,ShieldCheck,LogOut,RefreshCw,Search,Settings2,LockKeyhole,CheckCircle2,FileText,Pencil,Clock3,Activity,MailCheck } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import {parsePlanPrice,formatPlanPriceInput} from './lib/plan-prices';
 import {DEFAULT_TRIAL,type TrialSettings,remainingTrialDays} from './lib/trial';
@@ -9,9 +9,24 @@ type Plan={code:string;name:string;client_limit:number;monthly_price_brl:number}
 type Office={id:string;name:string;created_at:string;owner_email:string|null;plan_code:string;plan_name:string;access_status:'active'|'suspended';client_limit:number;monthly_price_brl:number;clients_active:number;charges_total:number;notifications_accepted:number;billing_status?:'active'|'trialing'|'pending';trial_started_at?:string|null;trial_ends_at?:string|null};
 type Data={organizations:Office[];plans:Plan[]};
 type Props={canOpenOffice:boolean;onOpenOffice:()=>void};
+type Signup={user_id:string;email:string|null;full_name:string|null;declared_office_name:string|null;registered_at:string;verified:boolean;last_sign_in_at:string|null;org_id:string|null;office_name:string|null;billing_status:'active'|'trialing'|'pending'|null;access_status:string|null;trial_ends_at:string|null};
+type MonitorEvent={id:number;org_id:string;actor_user_id:string|null;event_type:string;entity_id:string|null;occurred_at:string;office_name:string};
+type MonitorData={registrations:Signup[];activities:MonitorEvent[]};
+const EVENT_LABELS:Record<string,string>={
+ client_created:'Cliente cadastrado',client_updated:'Cliente atualizado',client_deleted:'Cliente excluído',
+ charge_created:'Cobrança criada',charge_updated:'Cobrança atualizada',charge_deleted:'Cobrança excluída',
+ charge_paid:'Pagamento registrado',charge_reopened:'Cobrança reaberta'
+};
+const timestamp=(value:string)=>new Date(value).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;access_status?:string|null})=>
+ o.access_status==='suspended'?'Suspenso':
+ o.billing_status==='trialing'
+  ?remainingTrialDays(o.trial_ends_at||null)>0?'Em teste':'Teste expirado'
+  :o.billing_status==='pending'?'Aguardando ativação'
+  :o.billing_status==='active'?'Assinatura liberada':'Sem escritório';
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
- const [tab,setTab]=useState<'home'|'offices'|'plans'|'trial'>('home');
+ const [tab,setTab]=useState<'home'|'offices'|'plans'|'trial'|'monitor'>('home');
  const [data,setData]=useState<Data>({organizations:[],plans:[]});
  const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
  const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
@@ -24,6 +39,10 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [trialBusy,setTrialBusy]=useState(false);
  const [trialError,setTrialError]=useState('');
  const [extendDays,setExtendDays]=useState(7);
+ const [monitor,setMonitor]=useState<MonitorData>({registrations:[],activities:[]});
+ const [monitorError,setMonitorError]=useState('');
+ const [monitorOffice,setMonitorOffice]=useState<string>('all');
+ const [monitorLoading,setMonitorLoading]=useState(false);
  const reload=useCallback(async()=>{if(!supabase)return;setBusy(true);setError('');
   const {data:result,error:e}=await supabase.rpc('master_dashboard');
   if(e)setError('Não foi possível consultar o Admin Master: '+e.message);
@@ -31,6 +50,19 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   setBusy(false);
  },[]);
  useEffect(()=>{void reload();},[reload]);
+ const loadMonitor=useCallback(async()=>{
+   if(!supabase)return;
+   setMonitorLoading(true);
+   const {data:result,error:e}=await supabase.rpc('master_monitor',{p_org_id:null,p_limit:150});
+   if(e)setMonitorError('Execute a Etapa 6 no Supabase para visualizar todos os cadastros e atividades: '+e.message);
+   else{setMonitor(result as MonitorData);setMonitorError('');}
+   setMonitorLoading(false);
+ },[]);
+ useEffect(()=>{void loadMonitor();},[loadMonitor]);
+ useEffect(()=>{
+   const timer=window.setInterval(()=>{void loadMonitor();},60000);
+   return()=>window.clearInterval(timer);
+ },[loadMonitor]);
  const refreshTrial=useCallback(async()=>{
    if(!supabase)return;
    const {data:d,error:e}=await supabase.from('saas_trial_settings')
@@ -74,6 +106,12 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const active=offices.filter(o=>o.access_status==='active');
  const paying=active.filter(o=>!o.billing_status||o.billing_status==='active');
  const visible=useMemo(()=>offices.filter(o=>(o.name+' '+(o.owner_email||'')).toLowerCase().includes(term.toLowerCase())),[offices,term]);
+ const trialOffices=offices.filter(o=>o.billing_status==='trialing');
+ const runningTrials=trialOffices.filter(o=>remainingTrialDays(o.trial_ends_at||null)>0);
+ const expiredTrials=trialOffices.filter(o=>remainingTrialDays(o.trial_ends_at||null)===0);
+ const pendingSignups=monitor.registrations.filter(r=>!r.org_id);
+ const filteredActivities=monitor.activities.filter(a=>monitorOffice==='all'||a.org_id===monitorOffice);
+ const filteredRegistrations=monitor.registrations.filter(r=>monitorOffice==='all'||r.org_id===monitorOffice);
  function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setExtendDays(7);setError('');setNotice('');}
  function beginPrice(p:Plan){
   setEditPrice(p);setPriceInput(formatPlanPriceInput(Number(p.monthly_price_brl)));
@@ -120,18 +158,25 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   <button className={tab==='home'?'current':''} onClick={()=>setTab('home')}><Wallet size={18}/>Visão geral</button>
   <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length}</small></button>
   <button className={tab==='plans'?'current':''} onClick={()=>setTab('plans')}><Settings2 size={18}/>Planos SaaS</button>
-  <button className={tab==='trial'?'current':''} onClick={()=>setTab('trial')}><Clock3 size={18}/>Teste grátis</button>
+  <button className={tab==='trial'?'current':''} onClick={()=>setTab('trial')}><Clock3 size={18}/>Teste grátis <small>{trialOffices.length}</small></button>
+  <button className={tab==='monitor'?'current':''} onClick={()=>setTab('monitor')}><Activity size={18}/>Cadastros e atividades <small>{pendingSignups.length}</small></button>
   <div className="master-sidefoot"><div><LockKeyhole size={17}/> Área restrita ao administrador da plataforma</div>
    {canOpenOffice&&<button onClick={onOpenOffice}><Building2 size={17}/>Painel do contador</button>}
    <button onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={17}/>Sair</button>
   </div></aside>
-  <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>void reload()}><RefreshCw size={16}/>Atualizar</button></header>
+  <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>{void reload();void loadMonitor();}}><RefreshCw size={16}/>Atualizar</button></header>
    <div className="master-inner"><p className="master-eyebrow">PAINEL ADMINISTRATIVO</p>
-    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e limites':'Configurar teste grátis'}</h1>
-    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Preços configurados para o SaaS (não significam pagamentos recebidos).':'Personalize a duração, o limite e a oferta do período de avaliação.'}</p>
+    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e limites':tab==='trial'?'Período de teste':'Cadastros e atividades'}</h1>
+    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Preços configurados para o SaaS (não significam pagamentos recebidos).':tab==='trial'?'Personalize a duração, o limite e acompanhe os novos escritórios.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
     {error&&<div className="master-alert">{error}</div>}{notice&&<div className="master-alert success">{notice}</div>}
     {busy&&<p className="master-loading">Atualizando informações…</p>}
     {tab==='home'&&<>
+     <div className="master-trial-pulse">
+       <button onClick={()=>setTab('trial')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
+       <button onClick={()=>setTab('trial')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
+       <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Cadastros sem escritório <strong>{pendingSignups.length}</strong></button>
+       <button onClick={()=>setTab('monitor')}><Activity size={17}/> Ações recentes <strong>{monitor.activities.length}</strong></button>
+     </div>
      <div className="master-kpis">
       <article><span>Escritórios <Building2 size={18}/></span><strong>{offices.length}</strong><small>{active.length} ativos</small></article>
       <article><span>Clientes atendidos <Users size={18}/></span><strong>{offices.reduce((a,o)=>a+Number(o.clients_active),0)}</strong><small>Clientes ativos de todos os escritórios</small></article>
@@ -156,6 +201,12 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
       <div className="master-panelhead"><h2>Oferta de teste grátis</h2><Clock3 size={19}/></div>
       <div className="master-trial-content">
         <p className="master-trial-intro">O prazo começa quando o escritório é criado. Após o vencimento, a plataforma bloqueia clientes e cobranças até você prorrogar o teste ou liberar a assinatura.</p>
+        <div className="master-trial-stats">
+          <div><strong>{runningTrials.length}</strong><span>Em teste</span></div>
+          <div><strong>{expiredTrials.length}</strong><span>Vencidos</span></div>
+          <div><strong>{monitor.registrations.filter(r=>!r.verified).length}</strong><span>E-mail pendente</span></div>
+          <div><strong>{pendingSignups.length}</strong><span>Sem escritório</span></div>
+        </div>
         {trialError&&<div className="master-alert" role="alert">{trialError}</div>}
         <label className="master-trial-switch"><input type="checkbox" disabled={!trialAvailable||trialBusy} checked={trial.trial_enabled}
           onChange={e=>setTrial(p=>({...p,trial_enabled:e.target.checked}))}/>
@@ -176,7 +227,64 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
           {trialBusy?'Salvando…':'Salvar alterações do teste'}
         </button>
       </div>
+      <div className="master-trial-table">
+        <div className="master-panelhead"><h2>Escritórios no período de teste</h2>
+          <button onClick={()=>setTab('monitor')}>Ver todos os cadastros</button></div>
+        <div className="master-tablewrap"><table>
+          <thead><tr><th>ESCRITÓRIO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th>VENCIMENTO</th><th></th></tr></thead>
+          <tbody>{trialOffices.map(o=><tr key={o.id}>
+            <td><strong>{o.name}</strong><small>{o.owner_email||'Sem responsável'}</small></td>
+            <td>{o.clients_active}/3</td><td>{o.charges_total}/3</td>
+            <td><span className="master-trial-status trial">{trialLabel(o)}</span></td>
+            <td>{o.trial_ends_at?timestamp(o.trial_ends_at):'Sem data'}</td>
+            <td><button onClick={()=>begin(o)}>Gerenciar</button></td>
+          </tr>)}
+          {!trialOffices.length&&<tr><td colSpan={6}>Nenhum escritório em avaliação ainda.</td></tr>}</tbody>
+        </table></div>
+      </div>
     </section>}
+    {tab==='monitor'&&<div className="master-monitor">
+      {monitorError&&<div className="master-alert">{monitorError}</div>}
+      <div className="master-monitor-tools">
+        <label>Filtrar por escritório
+          <select value={monitorOffice} onChange={e=>setMonitorOffice(e.target.value)}>
+            <option value="all">Todos os escritórios e cadastros</option>
+            {offices.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </label>
+        <button onClick={()=>void loadMonitor()} disabled={monitorLoading}><RefreshCw size={16}/>Atualizar</button>
+      </div>
+      <section className="master-panel">
+        <div className="master-panelhead"><h2>Cadastros na plataforma ({filteredRegistrations.length})</h2><span>Inclui quem ainda não confirmou o e-mail ou criou escritório</span></div>
+        <div className="master-tablewrap"><table>
+          <thead><tr><th>RESPONSÁVEL</th><th>ESCRITÓRIO</th><th>CADASTRADO EM</th><th>E-MAIL</th><th>SITUAÇÃO</th><th>ÚLTIMO LOGIN</th></tr></thead>
+          <tbody>
+            {filteredRegistrations.map(r=><tr key={r.user_id}>
+              <td><strong>{r.full_name||'Nome não informado'}</strong><small>{r.email||'Sem e-mail'}</small></td>
+              <td>{r.office_name||r.declared_office_name||'Ainda não criou'}</td>
+              <td>{timestamp(r.registered_at)}</td>
+              <td>{r.verified?'Confirmado':'Pendente'}</td>
+              <td><span className={'master-trial-status '+(r.billing_status==='trialing'?'trial':'')}>
+                {r.org_id?trialLabel(r):r.verified?'Cadastro sem escritório':'Aguardando confirmação'}
+              </span></td>
+              <td>{r.last_sign_in_at?timestamp(r.last_sign_in_at):'Ainda não entrou'}</td>
+            </tr>)}
+            {!filteredRegistrations.length&&<tr><td colSpan={6}>Nenhum cadastro encontrado.</td></tr>}
+          </tbody>
+        </table></div>
+      </section>
+      <section className="master-panel">
+        <div className="master-panelhead"><h2>Atividades registradas ({filteredActivities.length})</h2><span>Clientes, cobranças e pagamentos marcados no sistema</span></div>
+        <div className="master-activity-list">
+          {filteredActivities.map(ev=><div className="master-activity-item" key={ev.id}>
+             <Activity size={16}/><div><strong>{EVENT_LABELS[ev.event_type]||ev.event_type}</strong>
+             <small>{ev.office_name}</small></div><time>{timestamp(ev.occurred_at)}</time>
+           </div>)}
+          {!filteredActivities.length&&<div className="master-empty">Nenhuma atividade registrada. O histórico começa depois da execução da Etapa 6.</div>}
+        </div>
+        <p className="master-hint master-activity-note">Este painel mostra eventos operacionais, não o conteúdo de mensagens, senhas ou arquivos privados. Atualização automática a cada minuto; últimas 150 atividades.</p>
+      </section>
+    </div>}
     {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p><button type="button" className="master-price-edit" disabled={busy} onClick={()=>beginPrice(p)}><Pencil size={16}/> Alterar valor</button></article>)}</div>}
    </div>
   </main>
