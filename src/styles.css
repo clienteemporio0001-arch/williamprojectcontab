@@ -42,3 +42,9 @@
 .password-check .password-error{color:#ffaaa0}
 .password-check .password-pending{color:#92adc1}
 .password-field input[aria-invalid="true"]{border-color:#d07575}
+
+.auth-connection-test{display:block;width:100%;margin:13px auto 5px;padding:9px 12px;border:1px solid #2f5662;border-radius:9px;background:#142b36;color:#8fe3cc;font-size:11px;font-weight:800;cursor:pointer}
+.auth-connection-test:hover{background:#1a3a43;color:#b7f9e4}
+.auth-connection-test:disabled{opacity:.6;cursor:wait}
+.auth-connection-test:focus-visible{outline:2px solid #59e4bf;outline-offset:2px}
+.auth-connection-failed{background:#422832;border-color:#92505a;color:#ffd6cd}
