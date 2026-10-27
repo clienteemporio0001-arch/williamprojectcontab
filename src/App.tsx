@@ -527,7 +527,7 @@ export default function App() {
         </div>
 
         {page==='overview'&&isTrial&&<section className="trial-guide">
-          <div className="trial-guide-heading"><div><p className="eyebrow">APROVEITE SEU TESTE</p><h2>Conheça o ContabFlow em 3 passos</h2></div><span>7 dias para experimentar</span></div>
+          <div className="trial-guide-heading"><div><p className="eyebrow">APROVEITE SEU TESTE</p><h2>Conheça o ContabFlow em 3 passos</h2></div><span>{trialSettings.trial_days} dias para experimentar</span></div>
           <div className="trial-guide-grid">
             <div><Users size={19}/><strong>1. Cadastre clientes</strong><p>{clients.length} de {trialClientLimit} permitidos no teste.</p>
               <progress value={Math.min(clients.length,trialClientLimit)} max={trialClientLimit}/>
