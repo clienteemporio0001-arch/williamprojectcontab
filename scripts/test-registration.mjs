@@ -8,4 +8,5 @@ assert.equal(normalizeBrazilPhone('5568999999999'),'5568999999999');
 assert.equal(normalizeBrazilPhone('123'),null);
 assert.match(signupErrorMessage('For security purposes, you can only request this after 50 seconds.'),/50 segundos/);
 assert.match(signupErrorMessage('Email not confirmed'),/Confirme seu endereço/);
+assert.match(signupErrorMessage('Failed to fetch'),/Não foi possível conectar ao servidor/);
 console.log('OK: validação de cadastro e mensagens de segurança funcionando.');
