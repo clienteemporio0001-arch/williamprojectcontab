@@ -38,6 +38,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [trialAvailable,setTrialAvailable]=useState(false);
  const [trialBusy,setTrialBusy]=useState(false);
  const [trialError,setTrialError]=useState('');
+ const [trialOpen,setTrialOpen]=useState(false);
  const [extendDays,setExtendDays]=useState(7);
  const [monitor,setMonitor]=useState<MonitorData>({registrations:[],activities:[]});
  const [monitorError,setMonitorError]=useState('');
@@ -239,8 +240,34 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
         <p className="master-hint master-activity-note">Este painel mostra eventos operacionais, não o conteúdo de mensagens, senhas ou arquivos privados. Atualização automática a cada minuto; últimas 150 atividades.</p>
       </section>
     </div>}
-    {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}><Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong><p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p><p><FileText size={16}/> Gestão de cobranças e PDFs</p><p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p><button type="button" className="master-price-edit" disabled={busy} onClick={()=>beginPrice(p)}><Pencil size={16}/> Alterar valor</button></article>)}</div>}
-    {tab==='plans'&&<section className="master-panel master-trial">
+    {tab==='plans'&&<div className="master-plan-grid">{data.plans.map(p=><article key={p.code}>
+      <Wallet size={22}/><h2>{p.name}</h2><strong>{brl(Number(p.monthly_price_brl))}<small>/mês</small></strong>
+      <p><CheckCircle2 size={16}/> Até {p.client_limit} clientes ativos</p>
+      <p><FileText size={16}/> Gestão de cobranças e PDFs</p>
+      <p>Os valores são propostas comerciais, sem cobrança de assinatura integrada.</p>
+      <button type="button" className="master-price-edit" disabled={busy} onClick={()=>beginPrice(p)}><Pencil size={16}/> Alterar valor</button>
+    </article>)}
+    <article className="master-free-card">
+      <Clock3 size={22}/><h2>Teste Grátis</h2>
+      <strong>{trial.trial_enabled?trial.trial_days+' '+(trial.trial_days===1?'dia':'dias'):'Pausado'}<small>{trial.trial_enabled?' / gratuito':''}</small></strong>
+      <p><CheckCircle2 size={16}/> Até {trial.trial_max_clients} clientes para testar</p>
+      <p><FileText size={16}/> 3 cobranças e PDFs personalizados</p>
+      <p>{trial.trial_enabled?'Avaliação ativa para novos escritórios.':'Novos cadastros aguardam liberação.'} {runningTrials.length} em teste · {expiredTrials.length} vencidos.</p>
+      <button type="button" className="master-price-edit" onClick={()=>{void refreshTrial();setTrialOpen(true);}}>
+        <Pencil size={16}/> Personalizar teste
+      </button>
+    </article>
+    </div>}
+
+   </div>
+  </main>
+  {trialOpen&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!trialBusy)setTrialOpen(false);}}>
+    <div className="master-trial-dialog" role="dialog" aria-modal="true" aria-labelledby="trial-settings-heading">
+      <div className="master-trial-dialog-top">
+        <div><span>PLANOS SAAS</span><h2 id="trial-settings-heading">Personalizar teste grátis</h2></div>
+        <button type="button" onClick={()=>setTrialOpen(false)} disabled={trialBusy} aria-label="Fechar configurações">×</button>
+      </div>
+      <section className="master-panel master-trial">
       <div className="master-panelhead"><h2>Oferta de teste grátis</h2><Clock3 size={19}/></div>
       <div className="master-trial-content">
         <p className="master-trial-intro">O prazo começa quando o escritório é criado. Após o vencimento, a plataforma bloqueia clientes e cobranças até você prorrogar o teste ou liberar a assinatura.</p>
@@ -290,10 +317,9 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
           {!trialOffices.length&&<tr><td colSpan={6}>Nenhum escritório em avaliação ainda.</td></tr>}</tbody>
         </table></div>
       </div>
-    </section>}
-
-   </div>
-  </main>
+    </section>
+    </div>
+  </div>}
   {editPrice&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!busy)setEditPrice(null);}}>
     <section className="master-modal" role="dialog" aria-modal="true" aria-labelledby="plan-price-dialog-title">
       <h2 id="plan-price-dialog-title">Alterar valor do plano</h2>
