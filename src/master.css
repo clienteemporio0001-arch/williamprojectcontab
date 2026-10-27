@@ -48,3 +48,45 @@
   font-size:11px;
   line-height:1.6;
 }
+
+/* Avaliação gratuita controlada pelo Admin Master */
+.master-trial{max-width:860px}
+.master-trial-content{padding:24px;display:grid;gap:19px}
+.master-trial-intro{font-size:12px;line-height:1.8;color:#a5bfcc;margin:0}
+.master-trial-content>label:not(.master-trial-switch),.master-trial-cols>label{
+  display:grid;gap:8px;color:#d6e8eb;font-size:12px;font-weight:700
+}
+.master-trial-content input:not([type="checkbox"]),.master-trial-content textarea,
+.master-subscription-control input{
+  width:100%;min-height:43px;border:1px solid #365067;border-radius:8px;
+  color:#eaf8f4;background:#0b1a2d;padding:11px 12px;font-size:12px;
+}
+.master-trial-content textarea{resize:vertical;line-height:1.6}
+.master-trial-content input:focus-visible,.master-trial-content textarea:focus-visible{
+  outline:2px solid #46dcb7;outline-offset:2px
+}
+.master-trial-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.master-trial-switch{display:flex;align-items:center;gap:14px;border:1px solid #367560;
+  border-radius:10px;background:#173c38;padding:16px;cursor:pointer}
+.master-trial-switch input{width:20px;height:20px;accent-color:#4cdbb7;flex-shrink:0}
+.master-trial-switch span{display:grid;gap:6px}.master-trial-switch strong{font-size:12px;color:#cbf6e8}
+.master-trial-switch small{font-size:11px;color:#9cbdb6;line-height:1.5}
+.master-trial-content .master-hint,.master-subscription-control .master-hint{
+  font-size:11px;line-height:1.6;color:#a2c4cd;padding:13px;
+  background:#183338;border-radius:8px;margin:0
+}
+.master-trial-save{width:fit-content;min-width:230px;background:#4bdab6;color:#073327;
+  border:0;border-radius:8px;font-size:12px;font-weight:800;padding:13px 19px}
+.master-subscription-control{display:grid;gap:12px;padding:14px;border:1px solid #32615a;
+  background:#123337;border-radius:9px}.master-subscription-control>strong{font-size:12px}
+.master-subscription-control p{margin:0;font-size:11px;color:#c5e3dc}
+.master-subscription-control small{color:#97bdb9;font-size:10px}
+.master-trial-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.master-trial-actions label{grid-column:1/-1;display:grid;gap:6px;font-size:11px}
+.master-trial-actions button,.master-mark-pending{
+  padding:11px;border-radius:7px;border:1px solid #408c70;color:#b7f9df;
+  background:#1e4a40;font-size:11px;font-weight:800
+}
+.master-trial-actions button:last-child{background:#50d7b2;color:#053325}
+.master-mark-pending{border-color:#8f5b63;background:#472b32;color:#f8c1bf}
+@media(max-width:690px){.master-trial-content{padding:16px}.master-trial-cols{grid-template-columns:1fr}}
