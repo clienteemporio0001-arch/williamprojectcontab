@@ -29,3 +29,16 @@
 .auth-notice{display:flex;align-items:flex-start;gap:10px;color:#acebd4;font-size:11px;line-height:1.7;background:#194238;border:1px solid #398366;padding:12px 14px;border-radius:9px}
 .auth-notice svg{flex-shrink:0;margin-top:2px}
 @media(max-width:560px){.auth-card.auth-card-signup{padding:21px 18px;max-height:none}.register-grid{grid-template-columns:1fr}.register-section{margin-top:3px}}
+
+/* Senhas: visibilidade e verificação em tempo real */
+.password-field{display:block;position:relative;min-width:0}
+.password-field input{padding-right:46px!important}
+.password-field .password-toggle{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:38px;height:36px;color:#9cb5c8;border:0;border-radius:7px;background:transparent;padding:0;cursor:pointer;transition:color .15s ease,background .15s ease}
+.password-field .password-toggle:hover{background:#22374c;color:#66e3be}
+.password-field .password-toggle:focus-visible{outline:2px solid #55e0be;outline-offset:2px}
+.password-check{min-height:18px;display:flex;align-items:center;font-size:11px;line-height:1.5}
+.password-check span{display:inline-flex;align-items:center;gap:7px}
+.password-check .password-ok{color:#65e3b9}
+.password-check .password-error{color:#ffaaa0}
+.password-check .password-pending{color:#92adc1}
+.password-field input[aria-invalid="true"]{border-color:#d07575}
