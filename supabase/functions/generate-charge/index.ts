@@ -46,6 +46,13 @@ Deno.serve(async(req:Request)=>{
       generated_at:new Date().toISOString()
     },{onConflict:'obligation_id'});
     if(logError)throw logError;
+    // Auditoria administrativa: conta PDFs realmente gerados (sem armazenar conteúdo).
+    // A geração do documento não deve falhar caso a Etapa 6 ainda não tenha sido instalada.
+    const {error:activityError}=await admin.from('saas_activity_events').insert({
+      org_id:obligation.org_id, actor_user_id:user.id,entity_id:obligation.id,
+      event_type:'pdf_generated'
+    });
+    if(activityError)console.warn('Registro de atividade PDF indisponível:',activityError.code);
     return new Response(new Uint8Array(bytes),{
       status:200,headers:{...cors,'Content-Type':'application/pdf',
         'Content-Disposition':'attachment; filename="cobranca-'+obligation.due_date+'.pdf"',
