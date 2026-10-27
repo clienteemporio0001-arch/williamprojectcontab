@@ -94,10 +94,12 @@ Deno.serve(async(req:Request)=>{
   if(orgError)return fail(orgError.message);
 
   for(const org of (orgs||[]) as Org[]) {
-    if(org.access_status!=='active' || !(
-      org.billing_status==='active' ||
-      (org.billing_status==='trialing' && org.trial_ends_at && Date.parse(org.trial_ends_at)>Date.now())
-    )){stats.skipped++;continue;}
+    // Envio oficial automatizado é reservado aos escritórios com assinatura liberada.
+    // No teste grátis, o contador pode apenas preparar seus documentos e
+    // usar o botão manual do WhatsApp, sem consumo de templates oficiais.
+    if(org.access_status!=='active' || org.billing_status!=='active'){
+      stats.skipped++;continue;
+    }
     let local;
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
