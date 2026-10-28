@@ -35,7 +35,7 @@ CREATE OR REPLACE FUNCTION public.whatsapp_integration_store(
   p_error text DEFAULT NULL
 )
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=public,extensions,pg_temp AS $
+SET search_path=public,extensions,pg_temp AS $$
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'Operation denied' USING ERRCODE='42501';
@@ -64,7 +64,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.whatsapp_integration_token(p_org_id uuid,p_crypto_key text)
-RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $$
 DECLARE v_token text;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
