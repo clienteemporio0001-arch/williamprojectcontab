@@ -176,6 +176,24 @@ export default function App() {
     return()=>{valid=false;};
   },[session?.user.id]);
 
+  // Sincroniza a liberação feita pelo Admin Master sem exigir novo login.
+  useEffect(()=>{
+    if(!supabase||!session||!workspace?.id||demo)return;
+    let live=true;
+    const poll=async()=>{
+      const {data,error:e}=await supabase.from('organizations')
+        .select('plan_code,billing_status,access_status,trial_started_at,trial_ends_at')
+        .eq('id',workspace.id).single();
+      if(!live||e||!data)return;
+      if(workspace.billing_status!=='active'&&data.billing_status==='active'){
+        setToast('Seu plano foi liberado! Os limites de teste foram removidos.');
+      }
+      setWorkspace(prev=>prev?.id===workspace.id?{...prev,...data}:prev);
+    };
+    const timer=window.setInterval(()=>{void poll();},30000);
+    return()=>{live=false;window.clearInterval(timer);};
+  },[session?.user.id,workspace?.id,workspace?.billing_status,demo]);
+
   useEffect(() => {
     if(!supabase) return;
     if(!session) { setWorkspace(null); setClients([]); setObligations([]); setLogs([]); return; }
