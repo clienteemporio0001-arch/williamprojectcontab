@@ -653,6 +653,15 @@ export default function App() {
             <label>CPF/CNPJ do favorecido<input value={officeTaxId} onChange={e=>setOfficeTaxId(e.target.value)} placeholder="Identificação do escritório no PDF"/></label>
             <label>Chave Pix para pagamento<input value={pixKey} onChange={e=>setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"/></label>
             <label>Contato para dúvidas<input value={billingContact} onChange={e=>setBillingContact(e.target.value)} placeholder="WhatsApp ou e-mail do escritório"/></label>
+            <div className="field"><label>Disparos automáticos para clientes autorizados</label>
+              <p className="field-hint">A automação roda no servidor, sem Chrome aberto. Só funciona após instalar a Etapa 9, configurar os provedores e o agendamento. Durante o teste, os disparos ficam bloqueados.</p>
+              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
+                checked={emailRemindersEnabled} onChange={e=>setEmailRemindersEnabled(e.target.checked)}/>
+                <span><strong><Mail size={15}/> Ativar lembretes por e-mail</strong><small>Usa Resend e envia o PDF ao endereço autorizado do cliente.</small></span></label>
+              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
+                checked={whatsappRemindersEnabled} onChange={e=>setWhatsappRemindersEnabled(e.target.checked)}/>
+                <span><strong><MessageCircle size={15}/> Ativar lembretes por WhatsApp</strong><small>Usa a API oficial da Meta e template de utilidade aprovado.</small></span></label>
+            </div>
             <div className="field"><label htmlFor="template">Mensagem para envio manual</label><p className="field-hint">O disparo automático utiliza um template diferente, aprovado pela Meta.</p>
               <textarea id="template" rows={7} value={messageTemplate} onChange={e=>setMessageTemplate(e.target.value)}/><p className="field-hint">Variáveis: <code>{'{nome}'}</code>, <code>{'{cliente}'}</code>, <code>{'{empresa}'}</code>, <code>{'{documento}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{valor}'}</code> e <code>{'{link}'}</code>.</p>
             </div><button className="btn primary"><Check size={17}/>Salvar alterações</button></form>
