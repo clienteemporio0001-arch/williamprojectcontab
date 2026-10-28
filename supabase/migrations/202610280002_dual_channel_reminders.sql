@@ -37,6 +37,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS reminder_logs_unique_channel
 CREATE INDEX IF NOT EXISTS reminder_logs_channel_status
  ON public.reminder_logs(org_id,channel,status,created_at DESC);
 
+-- Protege campos de assinatura contra alteração direta de um assinante.
+-- Admin Master segue usando seus RPCs auditados; service role interna continua autorizada.
+CREATE OR REPLACE FUNCTION public.guard_org_billing_fields()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $
+BEGIN
+  IF auth.uid() IS NOT NULL AND NOT public.is_master_admin() AND (
+    NEW.plan_code IS DISTINCT FROM OLD.plan_code
+    OR NEW.billing_status IS DISTINCT FROM OLD.billing_status
+    OR NEW.access_status IS DISTINCT FROM OLD.access_status
+    OR NEW.trial_started_at IS DISTINCT FROM OLD.trial_started_at
+    OR NEW.trial_ends_at IS DISTINCT FROM OLD.trial_ends_at
+  ) THEN
+    RAISE EXCEPTION 'Plano, acesso e periodo de teste so podem ser alterados pelo Admin Master'
+      USING ERRCODE='42501';
+  END IF;
+  RETURN NEW;
+END;
+$;
+DROP TRIGGER IF EXISTS organizations_guard_billing_fields ON public.organizations;
+CREATE TRIGGER organizations_guard_billing_fields
+ BEFORE UPDATE ON public.organizations FOR EACH ROW
+ EXECUTE FUNCTION public.guard_org_billing_fields();
+REVOKE ALL ON FUNCTION public.guard_org_billing_fields() FROM PUBLIC,anon,authenticated;
+
 -- O usuario autenticado apenas altera as preferencias do proprio escritorio
 -- via RLS ja existente. Logs de disparo permanecem apenas para leitura.
 GRANT SELECT,UPDATE ON public.organizations TO authenticated;
