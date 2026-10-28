@@ -1,7 +1,8 @@
 -- CONTABFLOW: Conexão WhatsApp por escritório
 -- Execute após Etapa 9. Credenciais NUNCA são armazenadas em texto no navegador.
 BEGIN;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 CREATE TABLE IF NOT EXISTS public.whatsapp_integrations (
   org_id uuid PRIMARY KEY REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -34,7 +35,7 @@ CREATE OR REPLACE FUNCTION public.whatsapp_integration_store(
   p_error text DEFAULT NULL
 )
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=public,pg_temp AS $$
+SET search_path=public,extensions,pg_temp AS $
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'Operation denied' USING ERRCODE='42501';
@@ -63,7 +64,7 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.whatsapp_integration_token(p_org_id uuid,p_crypto_key text)
-RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $
 DECLARE v_token text;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN
