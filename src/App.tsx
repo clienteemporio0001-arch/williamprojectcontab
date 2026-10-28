@@ -505,6 +505,7 @@ export default function App() {
     <p className="auth-toggle">Primeiro acesso? <button type="button" className="link-button"
       onClick={()=>{setPublicScreen('landing');setError('');}}>Criar meu acesso</button></p>
     <button type="button" className="public-back" onClick={()=>setPublicScreen('landing')}>← Voltar à página inicial</button>
+    <p style={{textAlign:'center',fontSize:13,marginTop:15}}><a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener noreferrer">Política de Privacidade</a></p>
   </div></div><WhatsAppSupport/></>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
