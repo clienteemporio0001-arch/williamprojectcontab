@@ -53,6 +53,10 @@ export default function WhatsAppConnectionPanel({
   const [status,setStatus]=useState<ConnectionState|null>(null);
   const [error,setError]=useState('');
   const [existingBusinessApp,setExistingBusinessApp]=useState(false);
+  const [testPhone,setTestPhone]=useState('');
+  const [testConsent,setTestConsent]=useState(false);
+  const [testSending,setTestSending]=useState(false);
+  const [testFeedback,setTestFeedback]=useState<{ok:boolean;message:string}|null>(null);
   const info=useRef<{code?:string;waba?:string;phone?:string}>({});
   const submitting=useRef(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -236,6 +240,36 @@ export default function WhatsAppConnectionPanel({
     popup.location.href=oauth.toString();
   }
 
+  async function sendTest(){
+    if(!supabase||!orgId||status?.connection_status!=='connected'||testSending)return;
+    setTestFeedback(null);
+    const digits=testPhone.replace(/\D/g,'');
+    const normalized=digits.length===10||digits.length===11?'55'+digits:digits;
+    if(!/^55\d{10,11}$/.test(normalized)){
+      setTestFeedback({ok:false,message:'Informe um WhatsApp brasileiro válido com DDD. Exemplo: (68) 99999-9999.'});
+      return;
+    }
+    if(!testConsent){
+      setTestFeedback({ok:false,message:'Confirme que o destinatário autorizou esse teste.'});
+      return;
+    }
+    setTestSending(true);
+    try{
+      const {data,error:e}=await supabase.functions.invoke('whatsapp-test-send',{
+        body:{org_id:orgId,phone:normalized,consent_confirmed:true}
+      });
+      if(e||data?.error){
+        throw Error(data?.error||await invokeErrorMessage(e,'Não foi possível enviar o teste.'));
+      }
+      setTestFeedback({ok:true,message:String(data?.message||'Mensagem aceita pela Meta. Confira a entrega no destinatário.')});
+      setTestConsent(false);
+    }catch(e){
+      setTestFeedback({ok:false,message:e instanceof Error?e.message:'O envio de teste não pôde ser concluído.'});
+    }finally{
+      setTestSending(false);
+    }
+  }
+
   async function disconnect(){
     if(!orgId||!supabase||busy)return;
     if(!window.confirm('Desconectar este WhatsApp do ContabFlow? Os próximos lembretes serão interrompidos.'))return;
@@ -286,6 +320,27 @@ export default function WhatsAppConnectionPanel({
       </button>
     </div>}
 
+    {status?.connection_status==='connected'&&<section className="stack" style={{gap:12,padding:16,border:'1px solid #325368',borderRadius:14,background:'rgba(11,33,52,.6)'}}>
+      <div><strong>Enviar mensagem de teste</strong>
+        <p className="subtle small" style={{marginTop:4}}>Teste o número conectado acima usando o modelo oficial hello_world. Não envia cobranças nem PDFs.</p>
+      </div>
+      <label htmlFor="whatsapp-test-phone">Número destinatário com DDD</label>
+      <input id="whatsapp-test-phone" type="tel" inputMode="tel" autoComplete="tel"
+        value={testPhone} disabled={testSending||busy}
+        placeholder="(68) 99999-9999" onChange={e=>{setTestPhone(e.target.value);setTestFeedback(null);}}/>
+      <label className="check-card" style={{margin:0}}>
+        <input type="checkbox" checked={testConsent} disabled={testSending||busy} onChange={e=>setTestConsent(e.target.checked)}/>
+        <span><strong>Confirmo que este número autorizou receber o teste</strong>
+          <small>O contato precisa estar cadastrado em Clientes com consentimento de WhatsApp. Se estiver usando o número de teste da Meta, ele também precisa ser verificado como destinatário na Meta.</small>
+        </span>
+      </label>
+      <button type="button" className="btn primary" onClick={()=>void sendTest()} disabled={testSending||busy||!testPhone.trim()||!testConsent}>
+        {testSending?<Loader2 size={16}/>:<MessageCircle size={16}/>}
+        {testSending?'Enviando teste...':'Enviar mensagem de teste'}
+      </button>
+      {testFeedback&&<p role="status" style={{color:testFeedback.ok?'#57e3b0':'#ff9a9a',margin:0}}>{testFeedback.message}</p>}
+      <p className="subtle small">Limite de segurança: 3 testes por dia e intervalo mínimo de 5 minutos. A Meta pode restringir o número de teste a destinatários previamente verificados.</p>
+    </section>}
     {status&&!busy&&<button type="button" className="btn ghost" onClick={disconnect}>
       <Unplug size={16}/> Desconectar número
     </button>}
