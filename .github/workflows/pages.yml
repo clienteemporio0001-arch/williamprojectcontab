@@ -48,8 +48,13 @@ jobs:
           GITHUB_PAGES: 'true'
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_META_APP_ID: ${{ vars.VITE_META_APP_ID }}
-          VITE_META_CONFIG_ID: ${{ vars.VITE_META_CONFIG_ID }}
+          VITE_META_APP_ID: ${{ vars.VITE_META_APP_ID || '1361054859259161' }}
+          VITE_META_CONFIG_ID: ${{ vars.VITE_META_CONFIG_ID || '1135561272195135' }}
+      - name: Validar identificadores públicos da Meta no build
+        run: |
+          grep -RqF '1361054859259161' dist/assets || { echo "::error::Meta App ID não foi incorporado ao build."; exit 1; }
+          grep -RqF '1135561272195135' dist/assets || { echo "::error::Meta Configuration ID não foi incorporado ao build."; exit 1; }
+          echo "Identificadores Meta presentes no build."
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
