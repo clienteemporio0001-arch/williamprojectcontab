@@ -20,6 +20,7 @@ type MetaSdk={
 declare global{interface Window{FB?:MetaSdk;}}
 const appId=import.meta.env.VITE_META_APP_ID||'';
 const configId=import.meta.env.VITE_META_CONFIG_ID||'';
+const META_REDIRECT_URI='https://clienteemporio0001-arch.github.io/williamprojectcontab/';
 const MAX_SIGNUP_MS=180_000;
 const MISSING_WHATSAPP_SESSION_MS=2_000;
 const ALLOWED_META_EVENTS=new Set([
@@ -58,6 +59,7 @@ export default function WhatsAppConnectionPanel({
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const sessionTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const flowId=useRef(0);
+  const manualOAuthState=useRef('');
   const configured=Boolean(appId&&configId&&supabase);
 
   const clearTimer=useCallback(()=>{
@@ -71,6 +73,7 @@ export default function WhatsAppConnectionPanel({
     clearTimer();
     clearSessionTimer();
     info.current={};
+    manualOAuthState.current='';
     submitting.current=false;
     setBusy(false);
     setProgress('');
@@ -134,7 +137,7 @@ export default function WhatsAppConnectionPanel({
     setProgress('Autorização recebida. Registrando o número com segurança...');
     try{
       const {data,error:e}=await supabase.functions.invoke('whatsapp-connect',{
-        body:{action:'connect',org_id:orgId,code,waba_id:waba,phone_number_id:phone}
+        body:{action:'connect',org_id:orgId,code,...(manualOAuthState.current?{oauth_flow:'manual'}:{}),waba_id:waba,phone_number_id:phone}
       });
       if(e||data?.error)throw Error(data?.error||
         await invokeErrorMessage(e,'O servidor não conseguiu finalizar a conexão. Confira sua conta no Supabase.'));
@@ -158,6 +161,18 @@ export default function WhatsAppConnectionPanel({
 
   useEffect(()=>{
     const onMessage=(event:MessageEvent)=>{
+      // OAuth explícito: o callback retorna ao domínio do ContabFlow e informa o código com state.
+      if(event.origin===window.location.origin){
+        const msg=event.data as {type?:string;code?:string;state?:string;error?:string}|null;
+        if(msg?.type!=='CONTABFLOW_META_OAUTH'||!busy||!manualOAuthState.current)return;
+        if(msg.state!==manualOAuthState.current){stopFlow('A verificação de segurança do login não corresponde à solicitação.');return;}
+        if(msg.error){stopFlow('A Meta não concluiu a autorização: '+String(msg.error).slice(0,120));return;}
+        if(!msg.code){stopFlow('A Meta não retornou o código de autorização.');return;}
+        info.current={...info.current,code:msg.code};
+        setProgress('Autorização recebida. Validando a conta WhatsApp no servidor...');
+        void attemptComplete();
+        return;
+      }
       let host='';
       try{host=new URL(event.origin).hostname;}catch{return;}
       if(host!=='facebook.com'&&!host.endsWith('.facebook.com'))return;
@@ -191,55 +206,35 @@ export default function WhatsAppConnectionPanel({
   },[attemptComplete,busy,clearSessionTimer,stopFlow]);
 
   function connect(){
-    if(!window.FB||!configId||busy||!orgId)return;
+    if(!appId||!configId||busy||!orgId)return;
+    const state='cfwa_'+crypto.randomUUID();
+    const oauth=new URL('https://www.facebook.com/v26.0/dialog/oauth');
+    oauth.searchParams.set('client_id',appId);
+    oauth.searchParams.set('config_id',configId);
+    oauth.searchParams.set('redirect_uri',META_REDIRECT_URI);
+    oauth.searchParams.set('response_type','code');
+    oauth.searchParams.set('state',state);
+    if(existingBusinessApp){
+      oauth.searchParams.set('extras',JSON.stringify({setup:{},featureType:'whatsapp_business_app_onboarding'}));
+    }
+    // A janela deve abrir diretamente pelo clique, para não ser bloqueada pelo navegador.
+    const popup=window.open('about:blank','contabflow-meta-signup','popup=yes,width=610,height=760');
+    if(!popup){setError('O navegador bloqueou a janela. Permita pop-ups para o ContabFlow e tente novamente.');return;}
     flowId.current+=1;
     const activeFlow=flowId.current;
+    manualOAuthState.current=state;
     info.current={};
     submitting.current=false;
     setError('');
-    setProgress('Conclua a seleção do número na janela da Meta. Você pode cancelar aqui se a janela fechar.');
     setBusy(true);
+    setProgress('Conclua a autorização na janela da Meta. A URL de retorno será a mesma usada na troca do código.');
     clearTimer();
     clearSessionTimer();
     timer.current=setTimeout(()=>{
       if(activeFlow!==flowId.current)return;
-      stopFlow('Não recebemos todas as confirmações da Meta. A tentativa foi encerrada para evitar travamento. Confira se selecionou e verificou um número.');
+      stopFlow('O prazo de autorização terminou. Feche a janela da Meta e tente novamente.');
     },MAX_SIGNUP_MS);
-    try{
-      window.FB.login((response)=>{
-        if(activeFlow!==flowId.current)return;
-        const code=response?.authResponse?.code||response?.code;
-        if(!code){
-          stopFlow(response?.authResponse?.accessToken?
-            'A Meta retornou um token de login, mas não o código de autorização exigido. Verifique a configuração Embedded Signup no Meta for Developers.':
-            'A Meta não concluiu a autorização. Confira a janela do Facebook, as permissões e o cadastro do número.');
-          return;
-        }
-        info.current={...info.current,code};
-        setProgress(info.current.waba?
-          'Autorização e conta WhatsApp recebidas. Concluindo conexão...':
-          'Login autorizado. Verificando se a Meta concedeu acesso a um número WhatsApp...');
-        if(!info.current.waba){
-          clearSessionTimer();
-          sessionTimer.current=setTimeout(()=>{
-            if(activeFlow!==flowId.current||info.current.waba)return;
-            setProgress('Consultando as contas WhatsApp autorizadas diretamente na Meta...');
-            void attemptComplete();
-          },MISSING_WHATSAPP_SESSION_MS);
-        }
-        void attemptComplete();
-      },{
-        config_id:configId,
-        auth_type:'rerequest',
-        response_type:'code',
-        override_default_response_type:true,
-        extras:existingBusinessApp
-          ?{setup:{},featureType:'whatsapp_business_app_onboarding'}
-          :{setup:{}}
-      });
-    }catch{
-      if(activeFlow===flowId.current)stopFlow('Não foi possível abrir a janela da Meta. Verifique a permissão de pop-ups do navegador.');
-    }
+    popup.location.href=oauth.toString();
   }
 
   async function disconnect(){
@@ -281,7 +276,7 @@ export default function WhatsAppConnectionPanel({
         <small>Tentar coexistência quando permitida pela Meta. Não exclua a conta do aplicativo.</small>
       </span>
     </label>
-    <button type="button" className="btn primary" onClick={connect} disabled={!configured||!sdkReady||busy||!orgId||serverReady===false}>
+    <button type="button" className="btn primary" onClick={connect} disabled={!configured||busy||!orgId||serverReady===false}>
       {busy?<Loader2 size={16}/>:<MessageCircle size={16}/>}
       {busy?'Conectando com a Meta...':status?'Reconectar meu WhatsApp Business':'Conectar meu WhatsApp Business'}
     </button>
@@ -291,7 +286,7 @@ export default function WhatsAppConnectionPanel({
         <XCircle size={16}/> Cancelar conexão
       </button>
     </div>}
-    {!sdkReady&&configured&&<p className="subtle small">Inicializando login seguro da Meta...</p>}
+
     {status&&!busy&&<button type="button" className="btn ghost" onClick={disconnect}>
       <Unplug size={16}/> Desconectar número
     </button>}
