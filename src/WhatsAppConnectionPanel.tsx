@@ -47,7 +47,7 @@ export default function WhatsAppConnectionPanel({
   orgId:string|null;
   onStatusChange?:(connected:boolean)=>void;
 }){
-  const [sdkReady,setSdkReady]=useState(false);
+  const [,setSdkReady]=useState(false);
   const [serverReady,setServerReady]=useState<boolean|null>(null);
   const [busy,setBusy]=useState(false);
   const [progress,setProgress]=useState('');
