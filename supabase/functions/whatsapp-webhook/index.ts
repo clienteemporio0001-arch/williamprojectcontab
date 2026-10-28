@@ -49,7 +49,25 @@ Deno.serve(async req=>{
         const {data:log}=await db.from('reminder_logs').select('id,status')
           .eq('org_id',conn.org_id).eq('channel','whatsapp')
           .eq('provider_message_id',providerId).maybeSingle();
-        if(!log)continue;
+        if(!log){
+          // Testes usam a mesma conta, mas uma tabela separada de cobranças.
+          // O webhook assinado é a fonte de verdade sobre envio, entrega e falha.
+          const {data:test}=await db.from('whatsapp_test_attempts')
+            .select('id,status').eq('org_id',conn.org_id)
+            .eq('provider_message_id',providerId).maybeSingle();
+          if(test){
+            const testRank:Record<string,number>={processing:0,accepted:0,sent:1,delivered:2,read:3,failed:4};
+            if(test.status==='read')continue;
+            if(target!=='failed'&&(testRank[test.status]||0)>=(testRank[target]||0))continue;
+            const update:Record<string,unknown>={
+              status:target,last_status_at:new Date().toISOString()
+            };
+            if(target==='failed')update.error_code=String(status.errors?.[0]?.code||'unknown').slice(0,30);
+            await db.from('whatsapp_test_attempts').update(update)
+              .eq('id',test.id).eq('org_id',conn.org_id);
+          }
+          continue;
+        }
         // Webhooks podem ser entregues fora de ordem; não regredir "read" para "sent".
         const rank:Record<string,number>={processing:0,sent:1,delivered:2,read:3,failed:4};
         if(target!=='failed'&&(rank[log.status]||0)>=(rank[target]||0))continue;
