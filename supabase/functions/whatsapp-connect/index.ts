@@ -21,6 +21,15 @@ async function graph(path:string,token:string,version:string,method='GET'){
   if(!resp.ok)throw Error('Meta HTTP '+resp.status+': '+(json?.error?.message||'Requisição recusada'));
   return json;
 }
+// Diagnóstico restrito ao proprietário autenticado: nunca retorna valores secretos.
+function missingCredentialNames():string[]{
+  const missing:string[]=[];
+  if(!Deno.env.get('META_APP_ID')?.trim())missing.push('META_APP_ID');
+  if(!Deno.env.get('META_APP_SECRET')?.trim())missing.push('META_APP_SECRET');
+  const key=Deno.env.get('WHATSAPP_CREDENTIAL_KEY');
+  if(!key||key.length<32)missing.push('WHATSAPP_CREDENTIAL_KEY (mínimo 32 caracteres)');
+  return missing;
+}
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:headers(req)});
   if(req.method!=='POST')return respond(req,{error:'Método inválido'},405);
@@ -50,7 +59,8 @@ Deno.serve(async(req:Request)=>{
       .select('display_phone_number,verified_name,connection_status,last_error,connected_at,updated_at')
       .eq('org_id',orgId).maybeSingle();
     if(connError)return respond(req,{error:'Instale a migração WhatsApp por escritório antes de conectar'},503);
-    return respond(req,{connection:conn||null});
+    const missing=missingCredentialNames();
+    return respond(req,{connection:conn||null,configuration:{ready:missing.length===0,missing}});
   }
   if(action==='disconnect'){
     const {error:e}=await db.from('whatsapp_integrations').delete().eq('org_id',orgId);
@@ -66,8 +76,9 @@ Deno.serve(async(req:Request)=>{
   const appId=Deno.env.get('META_APP_ID'),appSecret=Deno.env.get('META_APP_SECRET');
   const encryptionKey=Deno.env.get('WHATSAPP_CREDENTIAL_KEY');
   const version=Deno.env.get('WHATSAPP_GRAPH_VERSION')||'v26.0';
-  if(!appId||!appSecret||!encryptionKey||encryptionKey.length<32){
-    return respond(req,{error:'Conexão indisponível. Admin Master: configure META_APP_ID, META_APP_SECRET e WHATSAPP_CREDENTIAL_KEY no servidor.'},503);
+  const missing=missingCredentialNames();
+  if(missing.length>0){
+    return respond(req,{error:'Credenciais pendentes no Supabase: '+missing.join(', ')+'. Entre em Edge Functions > Secrets para corrigir.'},503);
   }
   try{
     // O token é emitido pela Meta e nunca passa para o browser ou banco em texto aberto.
