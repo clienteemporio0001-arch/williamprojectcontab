@@ -25,3 +25,7 @@ jobs:
         run: supabase functions deploy generate-charge --project-ref "$PROJECT_ID" --use-api
       - name: Publicar agendador (sem ativar cron)
         run: supabase functions deploy dispatch-reminders --project-ref "$PROJECT_ID" --no-verify-jwt --use-api
+      - name: Publicar conexão WhatsApp por escritório
+        run: supabase functions deploy whatsapp-connect --project-ref "$PROJECT_ID" --no-verify-jwt --use-api
+      - name: Publicar webhook Meta
+        run: supabase functions deploy whatsapp-webhook --project-ref "$PROJECT_ID" --no-verify-jwt --use-api
