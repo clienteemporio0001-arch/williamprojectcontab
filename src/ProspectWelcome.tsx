@@ -1,7 +1,7 @@
 import {useState,type FormEvent} from 'react';
 import {ArrowRight,CalendarClock,CheckCircle2,Clock3,FileText,LayoutDashboard,LockKeyhole,LogOut,ShieldCheck,Sparkles,Users,Wallet} from 'lucide-react';
 import type {TrialSettings} from './lib/trial';
-import './welcome.css';
+import './styles.css';
 
 type Plan={code:string;name:string;client_limit:number;monthly_price_brl:number};
 type Props={
