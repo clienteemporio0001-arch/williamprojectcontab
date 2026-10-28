@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
   BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp,
-  ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle,
+  ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle, Mail,
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
   Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff
 } from 'lucide-react';
@@ -22,7 +22,7 @@ import {
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
 type SignupPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
-type Workspace = {id:string;name:string;plan_code?:string;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
+type Workspace = {id:string;name:string;plan_code?:string;email_reminders_enabled?:boolean;whatsapp_reminders_enabled?:boolean;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
 
@@ -39,7 +39,7 @@ function readDemo<T>(key:string, fallback:T):T {
   catch { return fallback; }
 }
 const blankClient = ():ClientDraft => ({
-  name:'', company:'', phone:'', opt_in:false, opt_in_at:null, consent_source:null, active:true
+  name:'', company:'', phone:'', email:'', email_opt_in:false, email_opt_in_at:null, email_consent_source:null, opt_in:false, opt_in_at:null, consent_source:null, active:true
 });
 const blankObligation = (clientId=''):ObligationDraft => ({
   client_id:clientId,title:'Honorários contábeis',amount:null,due_date:dateISO(7),
@@ -72,6 +72,8 @@ export default function App() {
   const [officeTaxId,setOfficeTaxId] = useState(() => readDemo('contabflow_tax_v2',''));
   const [pixKey,setPixKey] = useState(() => readDemo('contabflow_pix_v2',''));
   const [billingContact,setBillingContact] = useState(() => readDemo('contabflow_contact_v2',''));
+  const [emailRemindersEnabled,setEmailRemindersEnabled] = useState(false);
+  const [whatsappRemindersEnabled,setWhatsappRemindersEnabled] = useState(false);
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
@@ -207,7 +209,7 @@ export default function App() {
         if(e) throw e;
         if(!membership) {if(valid)setWorkspace(null);return;}
         let {data:org,error:orgError}=await s.from('organizations')
-          .select('id,name,plan_code,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
+          .select('*')
           .eq('id',membership.org_id).single();
         if(orgError?.code==='42703'){
           const previous=await s.from('organizations')
@@ -216,7 +218,7 @@ export default function App() {
           org=previous.data as typeof org;orgError=previous.error as typeof orgError;
         }
         if(orgError)throw orgError;
-        if(valid&&org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');}
+        if(valid&&org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');setEmailRemindersEnabled(Boolean(org.email_reminders_enabled));setWhatsappRemindersEnabled(Boolean(org.whatsapp_reminders_enabled));}
       } catch(err) { if(valid)setError(String(err)); }
     })();
     return()=>{valid=false;};
@@ -381,7 +383,7 @@ export default function App() {
         if(contactError)console.warn('Contato opcional não atualizado',contactError.code);
       }
       const {data:org,error:fetchError}=await supabase.from('organizations')
-        .select('id,name,plan_code,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
+        .select('*')
         .eq('id',newId).single();
       if(fetchError||!org)throw Error('Escritório criado. Atualize a página: '+(fetchError?.message||'não encontrado'));
       setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);
