@@ -73,8 +73,8 @@ Deno.serve(async(req:Request)=>{
   if(!/^[a-zA-Z0-9_-]{10,1500}$/.test(code) || (wabaId!==''&&!/^\d{5,30}$/.test(wabaId)) || (phoneId!==''&&!/^\d{5,30}$/.test(phoneId)) || (phoneId!==''&&!wabaId)){
     return respond(req,{error:'Conclusão incompleta na Meta. Confira o número e tente conectar novamente.'},400);
   }
-  const appId=Deno.env.get('META_APP_ID'),appSecret=Deno.env.get('META_APP_SECRET');
-  const encryptionKey=Deno.env.get('WHATSAPP_CREDENTIAL_KEY');
+  const appId=Deno.env.get('META_APP_ID')||'',appSecret=Deno.env.get('META_APP_SECRET')||'';
+  const encryptionKey=Deno.env.get('WHATSAPP_CREDENTIAL_KEY')||'';
   const version=Deno.env.get('WHATSAPP_GRAPH_VERSION')||'v26.0';
   const missing=missingCredentialNames();
   if(missing.length>0){
