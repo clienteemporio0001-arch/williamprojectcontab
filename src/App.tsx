@@ -22,7 +22,7 @@ import {
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
 type SignupPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
-type Workspace = {id:string;name:string;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
+type Workspace = {id:string;name:string;plan_code?:string;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
 
@@ -188,7 +188,7 @@ export default function App() {
         if(e) throw e;
         if(!membership) {if(valid)setWorkspace(null);return;}
         let {data:org,error:orgError}=await s.from('organizations')
-          .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
+          .select('id,name,plan_code,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
           .eq('id',membership.org_id).single();
         if(orgError?.code==='42703'){
           const previous=await s.from('organizations')
@@ -362,7 +362,7 @@ export default function App() {
         if(contactError)console.warn('Contato opcional não atualizado',contactError.code);
       }
       const {data:org,error:fetchError}=await supabase.from('organizations')
-        .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
+        .select('id,name,plan_code,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
         .eq('id',newId).single();
       if(fetchError||!org)throw Error('Escritório criado. Atualize a página: '+(fetchError?.message||'não encontrado'));
       setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);
@@ -483,7 +483,7 @@ export default function App() {
       <button type="button" onClick={openUpgrade} className="btn primary">Conhecer planos e contratar</button>
       <button className="btn soft" onClick={()=>{if(supabase)void supabase.auth.signOut();}}>Sair</button>
     </div></div>
-    {upgradeOpen&&<UpgradePlansModal plans={signupPlans} currentPlan={session?.user.user_metadata?.selected_plan_code||''}
+    {upgradeOpen&&<UpgradePlansModal plans={signupPlans} currentPlan={workspace.plan_code||''}
       officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)} onRequest={requestUpgrade}/>}
     <WhatsAppSupport/>
   </>;
@@ -624,7 +624,7 @@ export default function App() {
     </main>
 
     {upgradeOpen&&workspace&&<UpgradePlansModal plans={signupPlans}
-      currentPlan={session?.user.user_metadata?.selected_plan_code||''}
+      currentPlan={workspace.plan_code||''}
       officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)}
       onRequest={requestUpgrade}/>}
     {modal&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)closeModal();}}>
