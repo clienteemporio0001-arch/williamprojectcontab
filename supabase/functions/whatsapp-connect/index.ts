@@ -60,7 +60,7 @@ Deno.serve(async(req:Request)=>{
   }
   if(action!=='connect')return respond(req,{error:'Ação inválida'},400);
   const code=String(body.code||''),wabaId=String(body.waba_id||''),phoneId=String(body.phone_number_id||'');
-  if(!/^[a-zA-Z0-9_-]{10,1500}$/.test(code) || !/^\d{5,30}$/.test(wabaId) || !/^\d{5,30}$/.test(phoneId)){
+  if(!/^[a-zA-Z0-9_-]{10,1500}$/.test(code) || !/^\d{5,30}$/.test(wabaId) || (phoneId!==''&&!/^\d{5,30}$/.test(phoneId))){
     return respond(req,{error:'Conclusão incompleta na Meta. Confira o número e tente conectar novamente.'},400);
   }
   const appId=Deno.env.get('META_APP_ID'),appSecret=Deno.env.get('META_APP_SECRET');
@@ -80,10 +80,16 @@ Deno.serve(async(req:Request)=>{
     const accessToken=String(exchanged?.access_token||'');
     if(accessToken.length<30)throw Error('A Meta não retornou um token de integração válido.');
     const phoneList=await graph(wabaId+'/phone_numbers?fields=id,display_phone_number,verified_name&limit=100',accessToken,version);
-    const phone=(phoneList?.data||[]).find((p:{id:string})=>String(p.id)===phoneId);
-    if(!phone)throw Error('Esse número não pertence à conta WhatsApp autorizada nesta conexão.');
+    const phones=(phoneList?.data||[]) as Array<{id:string;display_phone_number?:string;verified_name?:string}>;
+    // Em coexistência a Meta pode retornar apenas waba_id. Aceitar a recuperação
+    // somente quando a conta autorizada possui um único número inequívoco.
+    const phone=phoneId?phones.find(p=>String(p.id)===phoneId):phones.length===1?phones[0]:null;
+    if(!phone)throw Error(phoneId?
+      'Esse número não pertence à conta WhatsApp autorizada nesta conexão.':
+      'A Meta informou a conta WhatsApp sem escolher um número único. Abra Editar configurações no login da Meta e selecione o telefone.');
+    const selectedPhoneId=String(phone.id);
     const {data:previous}=await db.from('whatsapp_integrations')
-      .select('org_id').eq('phone_number_id',phoneId).neq('org_id',orgId).maybeSingle();
+      .select('org_id').eq('phone_number_id',selectedPhoneId).neq('org_id',orgId).maybeSingle();
     if(previous)throw Error('Este número já está conectado a outro escritório no ContabFlow.');
     let subscribed=false,reason='';
     try{
@@ -92,7 +98,7 @@ Deno.serve(async(req:Request)=>{
       if(!subscribed)reason='Meta não confirmou assinatura dos webhooks.';
     }catch(e){reason=String(e instanceof Error?e.message:e).slice(0,250);}
     const {error:storeError}=await db.rpc('whatsapp_integration_store',{
-      p_org_id:orgId,p_waba_id:wabaId,p_phone_number_id:phoneId,
+      p_org_id:orgId,p_waba_id:wabaId,p_phone_number_id:selectedPhoneId,
       p_display_phone_number:String(phone.display_phone_number||''),
       p_verified_name:String(phone.verified_name||''),
       p_access_token:accessToken,p_crypto_key:encryptionKey,
