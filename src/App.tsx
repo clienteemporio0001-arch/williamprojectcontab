@@ -660,7 +660,7 @@ export default function App() {
               <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
                 checked={emailRemindersEnabled} onChange={e=>setEmailRemindersEnabled(e.target.checked)}/>
                 <span><strong><Mail size={15}/> Ativar lembretes por e-mail</strong><small>Usa Resend e envia o PDF ao endereço autorizado do cliente.</small></span></label>
-              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
+              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'||!whatsappConnected}
                 checked={whatsappRemindersEnabled} onChange={e=>setWhatsappRemindersEnabled(e.target.checked)}/>
                 <span><strong><MessageCircle size={15}/> Ativar lembretes por WhatsApp</strong><small>Usa a API oficial da Meta e template de utilidade aprovado.</small></span></label>
             </div>
