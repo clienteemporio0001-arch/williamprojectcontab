@@ -37,18 +37,28 @@ Deno.serve(async(req:Request)=>{
   let input:Record<string,unknown>={};
   try{input=await req.json();}catch{return reply(req,{error:'Preencha os dados do teste.'},400);}
   const orgId=String(input.org_id||'');
-  let phone=String(input.phone||'').replace(/\D/g,'');
   if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(orgId))return reply(req,{error:'Escritório inválido.'},400);
-  if(phone.length===10||phone.length===11)phone='55'+phone;
-  if(!/^55\d{10,11}$/.test(phone))
-    return reply(req,{error:'Informe DDD + número brasileiro válido, como (68) 99999-9999.'},400);
-  if(input.consent_confirmed!==true)
-    return reply(req,{error:'Confirme que o destinatário autorizou o recebimento do teste.'},400);
 
   const {data:member,error:memberError}=await db.from('organization_members')
     .select('role').eq('org_id',orgId).eq('user_id',auth.user.id).maybeSingle();
   if(memberError)return reply(req,{error:'Não foi possível validar seu escritório.'},503);
   if(member?.role!=='owner')return reply(req,{error:'Somente o responsável pelo escritório pode enviar testes.'},403);
+
+  if(input.action==='status'){
+    const {data:recent,error:statusError}=await db.from('whatsapp_test_attempts')
+      .select('status,error_code,requested_at,last_status_at,recipient_last4')
+      .eq('org_id',orgId).order('id',{ascending:false}).limit(1).maybeSingle();
+    if(statusError)return reply(req,{error:'Não foi possível consultar o status do teste.'},503);
+    return reply(req,{ok:true,test:recent||null});
+  }
+  if(input.action!==undefined&&input.action!=='send')
+    return reply(req,{error:'Ação inválida.'},400);
+  let phone=String(input.phone||'').replace(/\D/g,'');
+  if(phone.length===10||phone.length===11)phone='55'+phone;
+  if(!/^55\d{10,11}$/.test(phone))
+    return reply(req,{error:'Informe DDD + número brasileiro válido, como (68) 99999-9999.'},400);
+  if(input.consent_confirmed!==true)
+    return reply(req,{error:'Confirme que o destinatário autorizou o recebimento do teste.'},400);
 
   // O número deve constar como destinatário ativo com autorização registrada neste escritório.
   const {data:recipients,error:clientError}=await db.from('clients')
@@ -82,8 +92,11 @@ Deno.serve(async(req:Request)=>{
     return reply(req,{error:'Não foi possível registrar o teste com segurança.'},503);
   }
   const saveStatus=async(status:'accepted'|'failed',code:string|null=null,providerId:string|null=null)=>{
-    await db.from('whatsapp_test_attempts')
-      .update({status,error_code:code,provider_message_id:providerId}).eq('id',attempt.id).eq('org_id',orgId);
+    let request=db.from('whatsapp_test_attempts')
+      .update({status,error_code:code,provider_message_id:providerId,last_status_at:new Date().toISOString()})
+      .eq('id',attempt.id).eq('org_id',orgId);
+    if(status==='accepted')request=request.eq('status','processing');
+    await request;
   };
   try{
     const {data:token,error:tokenError}=await db.rpc('whatsapp_integration_token',{
