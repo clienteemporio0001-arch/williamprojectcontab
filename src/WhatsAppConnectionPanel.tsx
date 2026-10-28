@@ -47,6 +47,7 @@ export default function WhatsAppConnectionPanel({
   onStatusChange?:(connected:boolean)=>void;
 }){
   const [sdkReady,setSdkReady]=useState(false);
+  const [serverReady,setServerReady]=useState<boolean|null>(null);
   const [busy,setBusy]=useState(false);
   const [progress,setProgress]=useState('');
   const [status,setStatus]=useState<ConnectionState|null>(null);
@@ -84,11 +85,19 @@ export default function WhatsAppConnectionPanel({
       body:{action:'status',org_id:orgId}
     });
     if(e||data?.error){
+      setServerReady(null);
       setError(data?.error||await invokeErrorMessage(e,
         'Não foi possível consultar a conexão. Confira sua sessão e o responsável pelo escritório.'));
       onStatusChange?.(false);
       return;
     }
+    const missing=Array.isArray(data?.configuration?.missing)
+      ?(data.configuration.missing as unknown[]).filter((name):name is string=>typeof name==='string')
+      :[];
+    setServerReady(missing.length===0);
+    setError(missing.length
+      ?'Credenciais pendentes no Supabase: '+missing.join(', ')+'. Corrija em Edge Functions > Secrets.'
+      :'');
     const connection=(data?.connection||null) as ConnectionState|null;
     setStatus(connection);
     onStatusChange?.(connection?.connection_status==='connected');
@@ -272,7 +281,7 @@ export default function WhatsAppConnectionPanel({
         <small>Tentar coexistência quando permitida pela Meta. Não exclua a conta do aplicativo.</small>
       </span>
     </label>
-    <button type="button" className="btn primary" onClick={connect} disabled={!configured||!sdkReady||busy||!orgId}>
+    <button type="button" className="btn primary" onClick={connect} disabled={!configured||!sdkReady||busy||!orgId||serverReady===false}>
       {busy?<Loader2 size={16}/>:<MessageCircle size={16}/>}
       {busy?'Conectando com a Meta...':status?'Reconectar meu WhatsApp Business':'Conectar meu WhatsApp Business'}
     </button>
@@ -287,6 +296,9 @@ export default function WhatsAppConnectionPanel({
       <Unplug size={16}/> Desconectar número
     </button>}
     {error&&<p role="alert" className="error-message">{error}</p>}
+    {serverReady===false&&<button type="button" className="btn ghost" onClick={()=>{void refresh();}} disabled={busy}>
+      Verificar credenciais novamente
+    </button>}
     <p className="subtle small">Nenhum token é exibido no painel. A autorização é individual e não dá acesso a conversas particulares. Se não conseguir conectar, confira as permissões de Provedor de Tecnologia na Meta.</p>
     <a className="external-link" href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">
       Configurar autorização do aplicativo na Meta <ExternalLink size={15}/>
