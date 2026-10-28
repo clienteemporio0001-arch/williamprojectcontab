@@ -61,6 +61,16 @@ No Supabase, com a função publicada, execute uma chamada autenticada com `x-cr
 
 A simulação não dispara mensagens e não consome os disparos no histórico. Por padrão, a rotina de produção só dispara entre **09:00 e 09:59 do fuso do escritório**, nunca fora da data de lembrete escolhida.
 
+## 5.1 Fazer um teste real imediatamente, sem esperar o horário
+
+Esta é uma **exceção temporária de diagnóstico**. No uso normal, o sistema sempre envia sozinho.
+
+- Nas Edge Function Secrets, configure `WHATSAPP_TEST_ORG_ID` com o UUID do seu escritório de teste e `WHATSAPP_TEST_RECIPIENT` com **seu próprio telefone** no formato `55DDDNÚMERO` (sem símbolos). É necessário que esse cliente tenha autorização, cobrança pendente e que a data coincida com um dos offsets da cobrança. O escritório precisa estar com assinatura ativa.
+- Confirme o template aprovado, o número de teste registrado na Meta e `DISPATCH_LIVE_ENABLED=true`.
+- Na chamada autenticada da função com header `x-cron-secret`, envie JSON `{"test_now":true}`. Esse modo ignora **somente o horário** para o escritório e telefone liberados; não ignora autorização, plano, datas ou histórico de deduplicação.
+- Confira `sentWhatsApp:1`, o ID retornado pela Meta no histórico e a mensagem no seu número. Se já tiver enviado para o mesmo vencimento/dia, a função vai ignorar a duplicata.
+- Após a validação, **remova os dois secrets de teste** e deixe apenas o cron automático. O cron nunca utiliza `test_now` porque envia corpo vazio.
+
 ## 6. Ativar agendamento automático
 
 No Supabase habilite as extensões `pg_cron` e `pg_net` e o Vault. No Vault cadastre:
