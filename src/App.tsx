@@ -21,7 +21,7 @@ import {
   phoneDigits, renderMessage
 } from './lib/types';
 
-type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings';
+type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings' | 'whatsapp';
 type SignupPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
 type Workspace = {id:string;name:string;plan_code?:string;email_reminders_enabled?:boolean;whatsapp_reminders_enabled?:boolean;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
@@ -32,7 +32,8 @@ const nav: {id:Page; name:string; icon:typeof LayoutDashboard}[] = [
   {id:'clients',name:'Clientes',icon:Users},
   {id:'obligations',name:'Cobranças',icon:FileText},
   {id:'automations',name:'Automações',icon:BellRing},
-  {id:'settings',name:'Configurações',icon:Settings2}
+  {id:'settings',name:'Configurações',icon:Settings2},
+  {id:'whatsapp',name:'Integração WhatsApp',icon:MessageCircle}
 ];
 
 function readDemo<T>(key:string, fallback:T):T {
@@ -530,12 +531,12 @@ export default function App() {
       officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)} onRequest={requestUpgrade}/>}
     <WhatsAppSupport/>
   </>;
-  const title={overview:'Visão geral',clients:'Clientes',obligations:'Cobranças',automations:'Automações',settings:'Configurações'}[page];
+  const title={overview:'Visão geral',clients:'Clientes',obligations:'Cobranças',automations:'Automações',settings:'Configurações',whatsapp:'Integração WhatsApp'}[page];
   return <div className="app-shell">
     <aside className={'sidebar '+(menuOpen?'mobile-open':'')}>
       <div className="brand"><span className="logo-mark"><CalendarClock size={22}/></span><span>contab<span className="brand-accent">flow</span><small>AUTOMAÇÃO CONTÁBIL</small></span></div>
       <div className="nav-label">PLATAFORMA</div>
-      <nav className="nav-list">{nav.map(n=><button key={n.id} className={'nav-item '+(page===n.id?'active':'')} onClick={()=>{setPage(n.id);setSearch('');setFilter('all');setMenuOpen(false);}}>
+      <nav className="nav-list">{nav.map(n=><button key={n.id} className={'nav-item '+(n.id==='whatsapp'?'nav-item-child ':'')+(page===n.id?'active':'')} onClick={()=>{setPage(n.id);setSearch('');setFilter('all');setMenuOpen(false);}}>
         <n.icon size={19} strokeWidth={1.9}/>{n.name}{page===n.id&&<span className="nav-active-dot"/>}</button>)}</nav>
       <div className="sidebar-footer">{masterStatus==='yes'&&<button className="btn soft block" style={{marginBottom:12}} onClick={()=>setMasterView(true)}><ShieldCheck size={16}/>Abrir Admin Master</button>}<div className="sidebar-note"><Sparkles size={16}/><strong>Mais tempo para seu escritório</strong><span>Automatize tarefas repetitivas e foque em seus clientes.</span></div>
         <div className="sidebar-profile"><span className="avatar">{orgLabel.slice(0,2).toUpperCase()}</span><span className="profile-text"><strong>{orgLabel}</strong><small>{demo?'Ambiente demonstrativo':'Espaço do escritório'}</small></span>
@@ -562,7 +563,8 @@ export default function App() {
             page==='clients'?'Organize sua carteira de clientes e suas autorizações de contato.':
             page==='obligations'?'Gere PDFs individuais de cobrança com valor, vencimento e dados do cliente.':
             page==='automations'?'Configure seu fluxo de lembretes e acompanhe as notificações.':
-            'Personalize os dados e a comunicação do seu escritório.'}</p></div>
+            page==='whatsapp'?'Conecte o número do seu escritório à API oficial da Meta.':
+            'Gerencie seus dados e preferências de cobrança.'}</p></div>
           {page==='clients'&&<button className="btn primary" onClick={()=>showClient()} disabled={!canAddTrialClient} title={!canAddTrialClient?'Limite do período de teste atingido':''}><Plus size={17}/>Novo cliente</button>}
           {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length||!canAddTrialCharge} title={!canAddTrialCharge?'Limite de 3 cobranças do teste atingido':''}><Plus size={17}/>Nova cobrança</button>}
         </div>
@@ -650,28 +652,65 @@ export default function App() {
           {logs.length?<div className="log-list">{logs.slice(0,15).map(log=><div className="log-row" key={log.id}><div><strong>{log.channel==='email'?'E-mail':'WhatsApp'} · {obligations.find(o=>o.id===log.obligation_id)?.title||'Obrigação'}</strong><span>{new Date(log.created_at).toLocaleString('pt-BR')}</span></div><span className={'status '+(log.status==='sent'?'paid':log.status==='failed'?'late':'neutral')}>{log.status==='sent'?'Aceito pela API':log.status==='failed'?'Falhou':'Processando'}</span></div>)}</div>:<div className="empty"><BellRing/><strong>Nenhum envio registrado</strong><p>O histórico aparecerá após os disparos reais da API.</p></div>}
         </section></div>}
 
-        {page==='settings'&&<div className="settings-layout"><section className="panel settings-card"><div className="panel-heading"><div><h2>Identidade do escritório</h2><p>Configurações básicas do seu espaço</p></div><Building2 size={19}/></div>
-          <form onSubmit={saveSettings} className="stack gap-lg"><label>Nome do escritório<input required value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} maxLength={100}/></label>
-            <label>CPF/CNPJ do favorecido<input value={officeTaxId} onChange={e=>setOfficeTaxId(e.target.value)} placeholder="Identificação do escritório no PDF"/></label>
-            <label>Chave Pix para pagamento<input value={pixKey} onChange={e=>setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"/></label>
-            <label>Contato para dúvidas<input value={billingContact} onChange={e=>setBillingContact(e.target.value)} placeholder="WhatsApp ou e-mail do escritório"/></label>
-            <div className="field"><label>Disparos automáticos para clientes autorizados</label>
-              <p className="field-hint">A automação roda no servidor, sem Chrome aberto. Só funciona após instalar a Etapa 9, configurar os provedores e o agendamento. Durante o teste, os disparos ficam bloqueados.</p>
-              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
-                checked={emailRemindersEnabled} onChange={e=>setEmailRemindersEnabled(e.target.checked)}/>
-                <span><strong><Mail size={15}/> Ativar lembretes por e-mail</strong><small>Usa Resend e envia o PDF ao endereço autorizado do cliente.</small></span></label>
-              <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'||!whatsappConnected}
-                checked={whatsappRemindersEnabled} onChange={e=>setWhatsappRemindersEnabled(e.target.checked)}/>
-                <span><strong><MessageCircle size={15}/> Ativar lembretes por WhatsApp</strong><small>Usa a API oficial da Meta e template de utilidade aprovado.</small></span></label>
+        {page==='settings'&&<div className="settings-layout settings-layout--compact">
+          <section className="panel settings-card">
+            <div className="panel-heading"><div><h2><Building2 size={17}/> Identidade do escritório</h2><p>Dados exibidos nos seus documentos de cobrança.</p></div></div>
+            <form onSubmit={saveSettings} className="stack gap-lg">
+              <div className="settings-fields-grid">
+                <label>Nome do escritório<input required value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} maxLength={100}/></label>
+                <label>CPF/CNPJ do favorecido<input value={officeTaxId} onChange={e=>setOfficeTaxId(e.target.value)} placeholder="Identificação do favorecido no PDF"/></label>
+                <label>Chave Pix para pagamento<input value={pixKey} onChange={e=>setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou chave aleatória"/></label>
+                <label>Contato para dúvidas<input value={billingContact} onChange={e=>setBillingContact(e.target.value)} placeholder="WhatsApp ou e-mail do escritório"/></label>
+              </div>
+              <button className="btn primary"><Check size={16}/> Salvar dados do escritório</button>
+            </form>
+          </section>
+          <section className="panel settings-card">
+            <div className="panel-heading"><div><h2><BellRing size={17}/> Preferências de cobrança</h2><p>Escolha canais e personalize o texto de apoio.</p></div></div>
+            <form onSubmit={saveSettings} className="stack gap-lg">
+              <div className="settings-toggles">
+                <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'}
+                  checked={emailRemindersEnabled} onChange={e=>setEmailRemindersEnabled(e.target.checked)}/>
+                  <span><strong><Mail size={15}/> Lembretes por e-mail</strong><small>Exige Resend configurado e autorização do cliente.</small></span>
+                </label>
+                <label className="check-card"><input type="checkbox" disabled={workspace?.billing_status!=='active'||!whatsappConnected}
+                  checked={whatsappRemindersEnabled} onChange={e=>setWhatsappRemindersEnabled(e.target.checked)}/>
+                  <span><strong><MessageCircle size={15}/> Lembretes por WhatsApp</strong><small>Requer número conectado, plano ativo e modelo aprovado.</small></span>
+                </label>
+              </div>
+              <button className="settings-connection-shortcut" type="button" onClick={()=>setPage('whatsapp')}>
+                <span className="shortcut-icon"><MessageCircle size={18}/></span>
+                <span><strong>Integração WhatsApp</strong><small>Conectar número ou consultar o status</small></span>
+                <ArrowUpRight size={17}/>
+              </button>
+              <div className="field"><label htmlFor="template">Mensagem para envio manual</label>
+                <textarea id="template" rows={3} value={messageTemplate} onChange={e=>setMessageTemplate(e.target.value)}/>
+                <p className="field-hint">O automático usa um modelo aprovado pela Meta. Variáveis: <code>{'{nome}'}</code>, <code>{'{documento}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{valor}'}</code> e <code>{'{link}'}</code>.</p>
+              </div>
+              <button className="btn primary"><Check size={16}/> Salvar preferências</button>
+            </form>
+          </section>
+        </div>}
+        {page==='whatsapp'&&<div className="whatsapp-page-layout">
+          <section className="panel settings-card whatsapp-main-card">
+            <div className="panel-heading"><div><h2><MessageCircle size={18}/> Conectar WhatsApp Business</h2><p>Autorize o número que enviará os lembretes deste escritório.</p></div>
+              <button type="button" className="btn soft tiny" onClick={()=>setPage('settings')}><Settings2 size={15}/> Configurações</button>
             </div>
-            <div className="field"><label htmlFor="template">Mensagem para envio manual</label><p className="field-hint">O disparo automático utiliza um template diferente, aprovado pela Meta.</p>
-              <textarea id="template" rows={7} value={messageTemplate} onChange={e=>setMessageTemplate(e.target.value)}/><p className="field-hint">Variáveis: <code>{'{nome}'}</code>, <code>{'{cliente}'}</code>, <code>{'{empresa}'}</code>, <code>{'{documento}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{valor}'}</code> e <code>{'{link}'}</code>.</p>
-            </div><button className="btn primary"><Check size={17}/>Salvar alterações</button></form>
-        </section><section className="panel settings-card"><div className="panel-heading"><div><h2>Integração WhatsApp</h2><p>API oficial da Meta</p></div><MessageCircle size={19}/></div>
-          <WhatsAppConnectionPanel orgId={workspace?.id||null} onStatusChange={setWhatsappConnected}/>
-          <p className="subtle small">O botão de WhatsApp nas cobranças abre uma mensagem manual pré-preenchida. O disparo automático exige o número do escritório conectado à API, modelo aprovado e cron.</p>
-          <a className="external-link" href="https://business.whatsapp.com/" target="_blank" rel="noreferrer">Documentação da plataforma <ArrowUpRight size={16}/></a>
-        </section></div>}
+            <div className="whatsapp-connect-body">
+              <WhatsAppConnectionPanel orgId={workspace?.id||null} onStatusChange={setWhatsappConnected}/>
+            </div>
+          </section>
+          <aside className="panel settings-card whatsapp-guide-card">
+            <div className="panel-heading"><div><h2><ShieldCheck size={17}/> Como funciona</h2><p>Conexão exclusiva do seu escritório.</p></div></div>
+            <div className="whatsapp-mini-steps">
+              <div><span>01</span><p><strong>Autorize na Meta</strong><small>Conecte uma conta empresarial e selecione seu número.</small></p></div>
+              <div><span>02</span><p><strong>Configure as cobranças</strong><small>Defina valores, vencimentos e autorizações dos destinatários.</small></p></div>
+              <div><span>03</span><p><strong>Envio no servidor</strong><small>Com plano ativo e modelo aprovado, a automação executa sem navegador aberto.</small></p></div>
+            </div>
+            <p className="field-hint whatsapp-help-note">Durante o teste grátis, os disparos automáticos permanecem bloqueados. A integração exige credenciais e permissões liberadas pela Meta.</p>
+            <a className="external-link" href="https://business.whatsapp.com/" target="_blank" rel="noreferrer">Documentação oficial <ArrowUpRight size={15}/></a>
+          </aside>
+        </div>}
       </div>
     </main>
 
