@@ -1,1 +1,13 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#0d1424"/><meta name="description" content="Chega de repetir cobranças todo mês. Organize honorários contábeis, gere documentos personalizados em PDF e acompanhe vencimentos no ContabFlow."/><title>ContabFlow | Menos retrabalho nas cobranças contábeis</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><meta name="theme-color" content="#0d1424"/><meta name="description" content="Chega de repetir cobranças todo mês. Organize honorários contábeis, gere documentos personalizados em PDF e acompanhe vencimentos no ContabFlow."/><title>ContabFlow | Menos retrabalho nas cobranças contábeis</title><script>
+(function(){
+  const params=new URLSearchParams(window.location.search);
+  const state=params.get('state')||'';
+  if(!window.opener||!state.startsWith('cfwa_')||(!params.has('code')&&!params.has('error')))return;
+  const response={type:'CONTABFLOW_META_OAUTH',state,code:params.get('code')||'',error:params.get('error_description')||params.get('error')||''};
+  try{
+    window.opener.postMessage(response,window.location.origin);
+    window.history.replaceState(null,'',window.location.pathname);
+    window.close();
+  }catch(e){document.body.textContent='Não foi possível concluir a autorização. Feche esta janela e tente novamente.';}
+})();
+</script></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
