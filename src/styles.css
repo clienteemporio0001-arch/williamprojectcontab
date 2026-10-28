@@ -323,3 +323,11 @@
  .overview-dense .bottom-stats{align-items:flex-start;gap:10px;flex-direction:column}
 }
 @media(prefers-reduced-motion:reduce){.overview-dense .trial-guide-toggle svg{transition:none}}
+
+/* CTA de assinatura dentro da faixa de teste e botão de visualização de planos. */
+.trial-banner .trial-upgrade-button{white-space:nowrap;font-weight:800;color:#6df5cc;border:1px solid #397c68;border-radius:7px;background:#1a493c;padding:7px 10px;font-size:11px}
+.trial-banner .trial-upgrade-button:hover{background:#245e4e;color:#d0ffec}
+.overview-dense .trial-banner .trial-upgrade-button{padding:6px 9px;margin:0;border:1px solid #3c9073;border-radius:7px;background:#194a3d;font-size:10px;white-space:nowrap}
+.overview-dense .trial-banner .trial-upgrade-button:hover{background:#27624f}
+@media(max-width:700px){.trial-banner .trial-upgrade-button{margin-left:27px}}
+@media(max-width:610px){.overview-dense .trial-banner .trial-upgrade-button{margin-left:24px}}
