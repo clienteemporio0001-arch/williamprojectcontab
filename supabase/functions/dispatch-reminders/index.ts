@@ -1,12 +1,12 @@
-// Edge Function: disparo horário de lembretes usando a API oficial da Meta.
+// Edge Function: envio por e-mail (Resend) e WhatsApp Cloud API (Meta).
 // Configure verify_jwt=false, CRON_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
 // WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TEMPLATE_NAME.
 // Nunca inclua essas credenciais no código do navegador.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createChargePdf } from '../_shared/billing_pdf.ts';
 
-type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null };
-type Client = { id:string; name:string; phone:string; active:boolean; opt_in:boolean; opt_in_at:string|null };
+type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null;email_reminders_enabled:boolean;whatsapp_reminders_enabled:boolean };
+type Client = { id:string; name:string; phone:string;company?:string;tax_id?:string;email:string|null;email_opt_in:boolean;email_opt_in_at:string|null;email_consent_source:string|null;active:boolean;opt_in:boolean;opt_in_at:string|null };
 type Obligation = {
   id:string; org_id:string; client_id:string; title:string; due_date:string;
   amount:number|null; status:string; recurring:boolean; series_id:string|null;
@@ -71,6 +71,30 @@ async function sendDocument(phone:string,values:string[],bytes:Uint8Array,filena
     throw new Error('Meta HTTP '+response.status+': '+JSON.stringify(json).slice(0,300));
   return String(json.messages[0].id);
 }
+function htmlSafe(value:string){return value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));}
+function pdfBase64(bytes:Uint8Array){
+  let binary='';
+  for(let i=0;i<bytes.length;i+=32768){
+    binary+=String.fromCharCode(...bytes.subarray(i,i+32768));
+  }
+  return btoa(binary);
+}
+async function sendEmailPdf(recipient:string,subject:string,html:string,bytes:Uint8Array,filename:string){
+  const key=Deno.env.get('RESEND_API_KEY');
+  const sender=Deno.env.get('RESEND_FROM_EMAIL');
+  if(!key||!sender)throw new Error('Resend não configurado');
+  const response=await fetch('https://api.resend.com/emails',{
+    method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json',
+      'Idempotency-Key':Deno.env.get('SUPABASE_URL')?('contabflow-'+crypto.randomUUID()):crypto.randomUUID()},
+    body:JSON.stringify({
+      from:sender,to:[recipient],subject,html,
+      attachments:[{filename,content:pdfBase64(bytes),content_type:'application/pdf'}]
+    })
+  });
+  const result=await response.json().catch(()=>null);
+  if(!response.ok||!result?.id)throw new Error('Resend HTTP '+response.status+': '+JSON.stringify(result).slice(0,220));
+  return String(result.id);
+}
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return fail('Método não permitido',405);
   const secret=Deno.env.get('CRON_SECRET');
@@ -85,12 +109,12 @@ Deno.serve(async(req:Request)=>{
   try { dryRun=(await req.json())?.dry_run===true; } catch { /* sem corpo = execução normal */ }
   const token=Deno.env.get('WHATSAPP_TOKEN');
   const phoneId=Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
-  if(!dryRun&&(!token||!phoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME')))
-    return fail('Configure os segredos do WhatsApp e um template de utilidade aprovado',503);
+  if(!dryRun&&Deno.env.get('DISPATCH_LIVE_ENABLED')!=='true')
+    return fail('Envios reais desativados. Configure DISPATCH_LIVE_ENABLED=true apenas depois de testar.',503);
 
-  const stats={dryRun,organizations:0,generated:0,wouldSend:0,sent:0,failed:0,skipped:0};
+  const stats={dryRun,organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
   const {data:orgs,error:orgError}=await db.from('organizations')
-    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at').limit(200);
+    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled').limit(200);
   if(orgError)return fail(orgError.message);
 
   for(const org of (orgs||[]) as Org[]) {
@@ -134,65 +158,109 @@ Deno.serve(async(req:Request)=>{
     const minDate=new Date(local.date+'T00:00:00Z');minDate.setUTCDate(minDate.getUTCDate()-7);
     const maxDate=new Date(local.date+'T00:00:00Z');maxDate.setUTCDate(maxDate.getUTCDate()+30);
     const {data:due,error:dueError}=await db.from('obligations')
-      .select('id,org_id,client_id,title,amount,due_date,status,recurring,series_id,due_day,document_url,reminder_offsets,clients!inner(id,name,company,tax_id,phone,active,opt_in,opt_in_at)')
+      .select('id,org_id,client_id,title,amount,due_date,status,recurring,series_id,due_day,document_url,reminder_offsets,clients!inner(id,name,company,tax_id,phone,email,email_opt_in,email_opt_in_at,email_consent_source,active,opt_in,opt_in_at)')
       .eq('org_id',org.id).eq('status','pending')
       .gte('due_date',minDate.toISOString().slice(0,10))
       .lte('due_date',maxDate.toISOString().slice(0,10)).limit(1000);
     if(dueError){stats.failed++;continue;}
 
+    // Canal independente: o mesmo vencimento pode gerar 1 email e 1 WhatsApp,
+    // cada um com tentativa e chave única próprias.
     for(const record of due||[]){
       const item=record as unknown as Obligation;
       const client=item.clients;
-      if(!client?.active||!client.opt_in||!client.opt_in_at||item.amount===null){stats.skipped++;continue;}
+      if(!client?.active||item.amount===null){stats.skipped++;continue;}
       const offset=dayDiff(item.due_date,local.date);
       if(!(item.reminder_offsets||[7,3,1,0]).includes(offset))continue;
-      if(dryRun) {
-        const {data:existing,error:checkError}=await db.from('reminder_logs')
-          .select('id').eq('org_id',org.id).eq('obligation_id',item.id)
-          .eq('due_date',item.due_date).eq('offset_days',offset).maybeSingle();
-        if(checkError){stats.failed++;continue;}
-        if(existing)stats.skipped++;
-        else stats.wouldSend++;
-        continue;
-      }
+      let pdf:Uint8Array|null=null;
+      const filename='cobranca-'+item.due_date+'.pdf';
 
-      // Unique constraint registra a tentativa ANTES de enviar, impedindo duplicidade.
-      const {data:log,error:logError}=await db.from('reminder_logs').insert({
-        org_id:org.id,obligation_id:item.id,due_date:item.due_date,
-        offset_days:offset,status:'processing'
-      }).select('id').single();
-      if(logError){stats.skipped++;continue;}
-      try{
-        // PDF é uma cobrança, nunca uma declaração de pagamento recebido.
-        const pdf=await createChargePdf({
-          officeName:org.name,officeTaxId:org.tax_id,pixKey:org.pix_key,
-          billingContact:org.billing_contact,clientName:client.name,
-          company:(client as Client&{company?:string}).company||'',
-          clientTaxId:(client as Client&{tax_id?:string}).tax_id||'',
-          service:item.title,amount:Number(item.amount),dueDate:item.due_date
-        });
-        const path=org.id+'/'+item.id+'.pdf';
-        const {error:uploadError}=await db.storage.from('billing-documents').upload(path,pdf,{
-          contentType:'application/pdf',cacheControl:'0',upsert:true
-        });
-        if(uploadError)throw uploadError;
-        const {error:documentError}=await db.from('billing_documents').upsert({
-          org_id:org.id,obligation_id:item.id,storage_path:path,
-          generated_at:new Date().toISOString()
-        },{onConflict:'obligation_id'});
-        if(documentError)throw documentError;
-        const messageId=await sendDocument(client.phone,[
-          client.name.split(' ')[0],item.title,formatDate(item.due_date),formatBRL(item.amount)
-        ],pdf,'cobranca-'+item.due_date+'.pdf');
-        await db.from('reminder_logs').update({
-          status:'sent',provider_message_id:messageId,sent_at:new Date().toISOString()
-        }).eq('id',log.id);
-        stats.sent++;
-      }catch(err){
-        await db.from('reminder_logs').update({
-          status:'failed',error:String(err).slice(0,500)
-        }).eq('id',log.id);
-        stats.failed++;
+      for(const channel of ['email','whatsapp'] as const){
+        const isEmail=channel==='email';
+        if(isEmail){
+          if(!org.email_reminders_enabled || !client.email_opt_in || !client.email_opt_in_at ||
+             !client.email_consent_source || !client.email?.trim())continue;
+        } else if(!org.whatsapp_reminders_enabled || !client.opt_in || !client.opt_in_at)continue;
+
+        if(dryRun){
+          const {data:existing,error:checkError}=await db.from('reminder_logs')
+            .select('id').eq('org_id',org.id).eq('obligation_id',item.id)
+            .eq('due_date',item.due_date).eq('offset_days',offset).eq('channel',channel).maybeSingle();
+          if(checkError){stats.failed++;continue;}
+          if(existing)stats.skipped++;
+          else{
+            stats.wouldSend++;
+            if(isEmail)stats.wouldSendEmail++;else stats.wouldSendWhatsApp++;
+          }
+          continue;
+        }
+
+        if((isEmail&&(!Deno.env.get('RESEND_API_KEY')||!Deno.env.get('RESEND_FROM_EMAIL'))) ||
+          (!isEmail&&(!token||!phoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME')))){
+          stats.configMissing++;continue;
+        }
+        // Se o contador marcou a cobrança como paga, não envie novos lembretes.
+        const {data:current,error:currentError}=await db.from('obligations')
+          .select('status').eq('id',item.id).single();
+        if(currentError||current?.status!=='pending'){stats.skipped++;continue;}
+
+        // Grava a tentativa antes de chamar o provedor; uma falha ambígua NÃO
+        // é reenviada automaticamente (evita cobrança duplicada ao cliente).
+        const {data:log,error:logError}=await db.from('reminder_logs').insert({
+          org_id:org.id,obligation_id:item.id,due_date:item.due_date,
+          offset_days:offset,channel,status:'processing'
+        }).select('id').single();
+        if(logError){stats.skipped++;continue;}
+        try{
+          if(!pdf){
+            pdf=await createChargePdf({
+              officeName:org.name,officeTaxId:org.tax_id,pixKey:org.pix_key,
+              billingContact:org.billing_contact,clientName:client.name,
+              company:client.company||'',clientTaxId:client.tax_id||'',
+              service:item.title,amount:Number(item.amount),dueDate:item.due_date
+            });
+            const path=org.id+'/'+item.id+'.pdf';
+            const {error:uploadError}=await db.storage.from('billing-documents').upload(path,pdf,{
+              contentType:'application/pdf',cacheControl:'0',upsert:true
+            });
+            if(uploadError)throw uploadError;
+            const {error:documentError}=await db.from('billing_documents').upsert({
+              org_id:org.id,obligation_id:item.id,storage_path:path,
+              generated_at:new Date().toISOString()
+            },{onConflict:'obligation_id'});
+            if(documentError)throw documentError;
+          }
+          let providerId:string;
+          if(isEmail){
+            const subject='Aviso de cobrança - '+item.title+' - vence em '+formatDate(item.due_date);
+            const greeting=htmlSafe(client.name.split(' ')[0]||client.name);
+            providerId=await sendEmailPdf(client.email!,subject,
+              '<div style="font-family:Arial,sans-serif;color:#243044;line-height:1.7;max-width:630px">'+
+              '<h2>Aviso de cobrança de honorários</h2><p>Olá, '+greeting+'.</p>'+
+              '<p>Segue em anexo o aviso referente a <strong>'+htmlSafe(item.title)+
+              '</strong>, com vencimento em <strong>'+htmlSafe(formatDate(item.due_date))+
+              '</strong> e valor de <strong>'+htmlSafe(formatBRL(item.amount))+'</strong>.</p>'+
+              '<p>O documento contém os dados para pagamento. Se já realizou o pagamento, desconsidere esta mensagem.</p>'+
+              '<p>Atenciosamente,<br>'+htmlSafe(org.name)+'</p>'+
+              '<hr/><small>Este aviso não é recibo nem confirmação de quitação. Em caso de dúvidas ou para deixar de receber lembretes, entre em contato com o escritório.</small></div>',
+              pdf,filename);
+          }else{
+            providerId=await sendDocument(client.phone,[
+              client.name.split(' ')[0],item.title,formatDate(item.due_date),formatBRL(item.amount)
+            ],pdf,filename);
+          }
+          const {error:updateError}=await db.from('reminder_logs').update({
+            status:'sent',provider_message_id:providerId,sent_at:new Date().toISOString()
+          }).eq('id',log.id);
+          if(updateError)throw updateError;
+          stats.sent++;
+          if(isEmail)stats.sentEmail++;else stats.sentWhatsApp++;
+        }catch(err){
+          await db.from('reminder_logs').update({
+            status:'failed',error:String(err).slice(0,500)
+          }).eq('id',log.id);
+          stats.failed++;
+        }
       }
     }
   }
