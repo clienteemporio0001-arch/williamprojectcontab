@@ -179,9 +179,10 @@ export default function App() {
   // Sincroniza a liberação feita pelo Admin Master sem exigir novo login.
   useEffect(()=>{
     if(!supabase||!session||!workspace?.id||demo)return;
+    const client=supabase;
     let live=true;
     const poll=async()=>{
-      const {data,error:e}=await supabase.from('organizations')
+      const {data,error:e}=await client.from('organizations')
         .select('plan_code,billing_status,access_status,trial_started_at,trial_ends_at')
         .eq('id',workspace.id).single();
       if(!live||e||!data)return;
