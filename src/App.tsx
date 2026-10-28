@@ -9,9 +9,10 @@ import {
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
 import MarketingLanding from './MarketingLanding';
+import ProspectWelcome from './ProspectWelcome';
 import WhatsAppSupport from './WhatsAppSupport';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
-import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from './lib/registration';
+import {normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
 import {
   type Client, type Obligation, type ReminderLog, DEFAULT_TEMPLATE,
   demoClients, demoObligations, dateISO, daysUntil, money, formatDate,
@@ -77,21 +78,13 @@ export default function App() {
   const [masterStatus,setMasterStatus] = useState<'checking'|'yes'|'no'>(supabase?'checking':'no');
   const [masterView,setMasterView] = useState(true);
   const [loading,setLoading] = useState(false);
-  const [authMode,setAuthMode] = useState<'login'|'signup'>('login');
   const [authEmail,setAuthEmail] = useState('');
   const [authPassword,setAuthPassword] = useState('');
-  const [authPasswordConfirm,setAuthPasswordConfirm] = useState('');
   const [showPassword,setShowPassword] = useState(false);
-  const [showConfirmPassword,setShowConfirmPassword] = useState(false);
-  const [signupName,setSignupName] = useState('');
-  const [signupOffice,setSignupOffice] = useState('');
-  const [signupTaxId,setSignupTaxId] = useState('');
-  const [signupPhone,setSignupPhone] = useState('');
-  const [signupCRC,setSignupCRC] = useState('');
-  const [signupPlan,setSignupPlan] = useState('');
   const [signupPlans,setSignupPlans] = useState<SignupPlan[]>([]);
   const [signupPlansError,setSignupPlansError] = useState(false);
   const [authNotice,setAuthNotice] = useState('');
+  const [emailLoginBusy,setEmailLoginBusy] = useState(false);
   const [newWorkspace,setNewWorkspace] = useState('');
   const [modal,setModal] = useState<'client'|'obligation'|null>(null);
   const [clientDraft,setClientDraft] = useState<ClientDraft>(blankClient());
