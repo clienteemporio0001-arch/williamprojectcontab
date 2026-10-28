@@ -82,8 +82,11 @@ Deno.serve(async(req:Request)=>{
   }
   try{
     // O token é emitido pela Meta e nunca passa para o browser ou banco em texto aberto.
+    const oauthFlow=String(body.oauth_flow||'');
+    if(oauthFlow!==''&&oauthFlow!=='manual')throw Error('Fluxo OAuth inválido.');
+    const redirectUri=oauthFlow==='manual'?'https://clienteemporio0001-arch.github.io/williamprojectcontab/':'';
     const url='oauth/access_token?'+new URLSearchParams({
-      client_id:appId,client_secret:appSecret,code,redirect_uri:''
+      client_id:appId,client_secret:appSecret,code,redirect_uri:redirectUri
     });
     const response=await fetch('https://graph.facebook.com/'+version+'/'+url);
     const exchanged=await response.json().catch(()=>({}));
