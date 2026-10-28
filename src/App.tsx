@@ -689,7 +689,7 @@ export default function App() {
         {clientDraft.email_opt_in&&<label>Origem da autorização para e-mail *
           <input required value={clientDraft.email_consent_source||''}
             onChange={e=>setClientDraft({...clientDraft,email_consent_source:e.target.value})}
-            placeholder="Ex.: contrato assinado, formulário de autorização"/></label>
+            placeholder="Ex.: contrato assinado, formulário de autorização"/></label>}
         <label className="check-card"><input type="checkbox" checked={clientDraft.opt_in} onChange={e=>setClientDraft({...clientDraft,opt_in:e.target.checked,opt_in_at:e.target.checked?new Date().toISOString():null,consent_source:e.target.checked?clientDraft.consent_source:null})}/><span><strong>O cliente autorizou lembretes pelo WhatsApp</strong><small>Marque apenas com autorização realmente obtida. Ter o contato salvo não é consentimento.</small></span></label>
         {clientDraft.opt_in&&<label>Como a autorização foi obtida? *<input required value={clientDraft.consent_source||''} onChange={e=>setClientDraft({...clientDraft,consent_source:e.target.value})} placeholder="Ex.: contrato de prestação de serviços, 10/10/2026"/></label>}
         <label className="check-card"><input type="checkbox" checked={clientDraft.active} onChange={e=>setClientDraft({...clientDraft,active:e.target.checked})}/><span><strong>Cliente ativo</strong><small>Clientes inativos não recebem lembretes automáticos.</small></span></label>
