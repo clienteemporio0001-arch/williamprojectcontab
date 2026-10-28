@@ -21,7 +21,7 @@ declare global{interface Window{FB?:MetaSdk;}}
 const appId=import.meta.env.VITE_META_APP_ID||'';
 const configId=import.meta.env.VITE_META_CONFIG_ID||'';
 const MAX_SIGNUP_MS=180_000;
-const MISSING_WHATSAPP_SESSION_MS=22_000;
+const MISSING_WHATSAPP_SESSION_MS=2_000;
 const ALLOWED_META_EVENTS=new Set([
   'FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
   'FINISH_OBO_MIGRATION','FINISH_GRANT_ONLY_API_ACCESS'
@@ -118,8 +118,8 @@ export default function WhatsAppConnectionPanel({
   },[configured]);
 
   const attemptComplete=useCallback(async()=>{
-    const {code,waba,phone}=info.current;
-    if(!code||!waba||!orgId||!supabase||submitting.current)return;
+    const {code,waba='',phone=''}=info.current;
+    if(!code||!orgId||!supabase||submitting.current)return;
     submitting.current=true;
     const activeFlow=flowId.current;
     setProgress('Autorização recebida. Registrando o número com segurança...');
@@ -209,12 +209,13 @@ export default function WhatsAppConnectionPanel({
         info.current={...info.current,code};
         setProgress(info.current.waba?
           'Autorização e conta WhatsApp recebidas. Concluindo conexão...':
-          'Login autorizado, mas a Meta ainda não enviou a conta WhatsApp. Se a janela fechou, será necessário selecionar o número em Editar configurações.');
+          'Login autorizado. Verificando se a Meta concedeu acesso a um número WhatsApp...');
         if(!info.current.waba){
           clearSessionTimer();
           sessionTimer.current=setTimeout(()=>{
             if(activeFlow!==flowId.current||info.current.waba)return;
-            stopFlow('A Meta autorizou o Facebook, mas não retornou a conta WhatsApp (WABA). Na próxima tentativa, clique em Editar configurações, selecione o portfólio e conclua o cadastro do número. Apenas Continuar como... pode reutilizar uma autorização incompleta.');
+            setProgress('Consultando as contas WhatsApp autorizadas diretamente na Meta...');
+            void attemptComplete();
           },MISSING_WHATSAPP_SESSION_MS);
         }
         void attemptComplete();
