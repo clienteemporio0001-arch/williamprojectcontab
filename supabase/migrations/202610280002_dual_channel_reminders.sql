@@ -11,12 +11,12 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS email_consent_source text;
 ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_email_opt_in_consistency;
 ALTER TABLE public.clients ADD CONSTRAINT clients_email_opt_in_consistency CHECK (
   NOT email_opt_in
-  OR (email IS NOT NULL AND email ~* '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'
+  OR (email IS NOT NULL AND email ~* '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'
       AND email_opt_in_at IS NOT NULL AND nullif(trim(email_consent_source),'') IS NOT NULL)
 );
 ALTER TABLE public.clients DROP CONSTRAINT IF EXISTS clients_email_valid;
 ALTER TABLE public.clients ADD CONSTRAINT clients_email_valid CHECK (
-  email IS NULL OR email='' OR email ~* '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'
+  email IS NULL OR email='' OR email ~* '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'
 );
 
 -- Os dois canais sao DESLIGADOS por padrao: o contador habilita quando estiver pronto.
