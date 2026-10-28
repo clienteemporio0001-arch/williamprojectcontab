@@ -37,7 +37,13 @@ Deno.serve(async(req:Request)=>{
   if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(orgId))return respond(req,{error:'Escritório inválido'},400);
   const {data:member,error:memberError}=await db.from('organization_members')
     .select('role').eq('org_id',orgId).eq('user_id',userData.user.id).maybeSingle();
-  if(memberError||member?.role!=='owner')return respond(req,{error:'Somente o responsável pelo escritório pode conectar o WhatsApp'},403);
+  if(memberError){
+    // Erro de consulta não equivale a falta de permissão. Não mostrar SQL ao cliente.
+    console.error('Erro ao consultar vínculo do escritório',memberError.code||'unknown');
+    return respond(req,{error:'Não foi possível consultar as permissões do escritório. Verifique os logs da função no Supabase.'},503);
+  }
+  if(!member)return respond(req,{error:'Este login não está vinculado ao escritório selecionado. Entre com a conta do responsável pelo escritório.'},403);
+  if(member.role!=='owner')return respond(req,{error:'Somente o responsável pelo escritório pode conectar o WhatsApp.'},403);
   const action=String(body.action||'status');
   if(action==='status'){
     const {data:conn,error:connError}=await db.from('whatsapp_integrations')
