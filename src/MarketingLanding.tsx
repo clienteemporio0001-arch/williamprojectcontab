@@ -1,6 +1,6 @@
 import {useEffect,useState,type FormEvent} from 'react';
 import {
-  ArrowRight,ArrowUpRight,CalendarClock,Check,CheckCircle2,Clock3,FileText,
+  ArrowRight,ArrowUpRight,CalendarClock,Check,CheckCircle2,FileText,
   MessageCircle,ShieldCheck,Users,Wallet,Repeat2,Sparkles,LockKeyhole,Mail,
   CircleHelp,TimerReset
 } from 'lucide-react';
