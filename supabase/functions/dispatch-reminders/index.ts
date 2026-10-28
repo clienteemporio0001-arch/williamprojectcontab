@@ -25,10 +25,10 @@ function localParts(date:Date,zone:string) {
 function dayDiff(date1:string,date2:string){
   return Math.round((Date.parse(date1+'T00:00:00Z')-Date.parse(date2+'T00:00:00Z'))/86400000);
 }
-function nextMonthDue(today:string,day:number) {
+function monthDue(today:string,day:number,monthsAhead:number) {
   const [year,month]=today.split('-').map(Number);
-  const next=new Date(Date.UTC(year,month,1));
-  const y=next.getUTCFullYear(),m=next.getUTCMonth()+1;
+  const target=new Date(Date.UTC(year,month-1+monthsAhead,1));
+  const y=target.getUTCFullYear(),m=target.getUTCMonth()+1;
   const last=new Date(Date.UTC(y,m,0)).getUTCDate();
   return String(y)+'-'+String(m).padStart(2,'0')+'-'+String(Math.min(day,last)).padStart(2,'0');
 }
@@ -142,16 +142,23 @@ Deno.serve(async(req:Request)=>{
     }
     for(const item of latest.values()){
       if(dryRun)break;
+      // Quando o último documento é do mês anterior, criar a competência do mês
+      // atual E a seguinte. Isso cobre também o aviso 7 dias antes quando o
+      // vencimento acontece no começo do mês seguinte.
+      // UNIQUE(series_id,due_date) impede documentos duplicados.
       if(item.due_date.slice(0,7)>local.date.slice(0,7))continue;
-      const newDue=nextMonthDue(local.date,item.due_day||20);
-      const {error:e}=await db.from('obligations').insert({
-        org_id:org.id,client_id:item.client_id,title:item.title,amount:item.amount,
-        due_date:newDue,status:'pending',recurring:true,series_id:item.series_id,
-        due_day:item.due_day,reminder_offsets:item.reminder_offsets||[7,3,1,0],
-        document_url:null // Documentos de outras competências não devem ser reaproveitados.
-      });
-      if(!e)stats.generated++;
-      else if(e.code!=='23505')stats.failed++;
+      for(const monthsAhead of [0,1]){
+        const newDue=monthDue(local.date,item.due_day||20,monthsAhead);
+        if(newDue<=item.due_date)continue;
+        const {error:e}=await db.from('obligations').insert({
+          org_id:org.id,client_id:item.client_id,title:item.title,amount:item.amount,
+          due_date:newDue,status:'pending',recurring:true,series_id:item.series_id,
+          due_day:item.due_day,reminder_offsets:item.reminder_offsets||[7,3,1,0],
+          document_url:null
+        });
+        if(!e)stats.generated++;
+        else if(e.code!=='23505')stats.failed++;
+      }
     }
 
     // Lê somente obrigações ainda não pagas, com vencimento na janela permitida.
