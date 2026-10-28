@@ -98,7 +98,7 @@ Deno.serve(async(req:Request)=>{
       for(const entry of grant.granular_scopes||[]){
         if(!['whatsapp_business_management','whatsapp_business_messaging'].includes(String(entry.scope)))continue;
         for(const candidate of entry.target_ids||[]){
-          if(/^\\d{5,30}$/.test(String(candidate)))ids.add(String(candidate));
+          if(/^\d{5,30}$/.test(String(candidate)))ids.add(String(candidate));
         }
       }
       if(ids.size!==1){
