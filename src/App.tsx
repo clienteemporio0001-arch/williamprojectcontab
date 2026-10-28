@@ -59,6 +59,7 @@ export default function App() {
   const demo = !supabase;
   const [page,setPage] = useState<Page>('overview');
   const [menuOpen,setMenuOpen] = useState(false);
+  const [trialGuideOpen,setTrialGuideOpen] = useState(true);
   const [search,setSearch] = useState('');
   const [filter,setFilter] = useState('all');
   const [clients,setClients] = useState<Client[]>(() => readDemo('contabflow_clients_v1',demoClients));
@@ -474,7 +475,7 @@ export default function App() {
         <div className="crumb"><span>Área de trabalho</span><span className="crumb-arrow">/</span><strong>{title}</strong></div>
         <div className="top-right"><span className="today-pill"><Clock3 size={15}/>{new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(new Date())}</span><span className="mini-avatar">{orgLabel[0]?.toUpperCase()||'C'}</span></div>
       </header>
-      <div className="main-content">
+      <div className={'main-content'+(page==='overview'?' overview-dense':'')}>
         {isTrial&&trialDaysLeft>0&&<div className="trial-banner" role="status">
           <Clock3 size={20}/><span><strong>Sua conta está no período de teste gratuito.</strong>
           <span className="trial-subline">Faltam {trialDaysLeft} {trialDaysLeft===1?'dia':'dias'} para o término. Você pode cadastrar até {trialClientLimit} clientes e criar até 3 cobranças, com PDFs personalizados. Os disparos automáticos via WhatsApp não estão disponíveis neste período.</span></span>
@@ -494,20 +495,41 @@ export default function App() {
           {(page==='overview'||page==='obligations')&&<button className="btn primary" onClick={()=>showObligation()} disabled={!clients.length||!canAddTrialCharge} title={!canAddTrialCharge?'Limite de 3 cobranças do teste atingido':''}><Plus size={17}/>Nova cobrança</button>}
         </div>
 
-        {page==='overview'&&isTrial&&<section className="trial-guide">
-          <div className="trial-guide-heading"><div><p className="eyebrow">APROVEITE SEU TESTE</p><h2>Conheça o ContabFlow em 3 passos</h2></div><span>{trialSettings.trial_days} dias para experimentar</span></div>
-          <div className="trial-guide-grid">
-            <div><Users size={19}/><strong>1. Cadastre clientes</strong><p>{clients.length} de {trialClientLimit} permitidos no teste.</p>
-              <progress value={Math.min(clients.length,trialClientLimit)} max={trialClientLimit}/>
-              <button onClick={()=>setPage('clients')}>Ir para clientes</button></div>
-            <div><FileText size={19}/><strong>2. Crie documentos</strong><p>{obligations.length} de 3 cobranças permitidas no teste.</p>
-              <progress value={Math.min(obligations.length,3)} max={3}/>
-              <button onClick={()=>setPage('obligations')}>Ir para cobranças</button></div>
-            <div><Sparkles size={19}/><strong>3. Explore as possibilidades</strong>
-              <p>Teste os PDFs e organize vencimentos. Tutoriais e novas soluções serão disponibilizados futuramente.</p>
-              <a target="_blank" rel="noopener noreferrer" href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Tenho%20interesse%20no%20ContabFlow.">Conversar sobre planos</a></div>
+        {page==='overview'&&isTrial&&<section className="trial-guide" aria-label="Progresso da avaliação">
+          <div className="trial-guide-heading">
+            <div className="trial-guide-title">
+              <span className="trial-guide-kicker">APROVEITE SEU TESTE</span>
+              <h2>Comece em 3 passos</h2>
+            </div>
+            <div className="trial-guide-actions">
+              <span className="trial-guide-countdown"><Clock3 size={13}/> {trialDaysLeft} {trialDaysLeft===1?'dia restante':'dias restantes'}</span>
+              <button type="button" className="trial-guide-toggle" aria-expanded={trialGuideOpen} aria-controls="trial-guide-content"
+                onClick={()=>setTrialGuideOpen(v=>!v)}>
+                {trialGuideOpen?'Recolher':'Mostrar passos'} <ChevronDown size={15} className={trialGuideOpen?'turn':''}/>
+              </button>
+            </div>
           </div>
-          <p className="trial-guide-foot">Durante a avaliação: até {trialClientLimit} clientes cadastrados e 3 cobranças; sem disparos automáticos. Seus dados permanecem vinculados ao escritório se você contratar.</p>
+          {trialGuideOpen&&<div id="trial-guide-content">
+            <div className="trial-guide-grid">
+              <div className="trial-step">
+                <div className="trial-step-heading"><span className="trial-step-icon"><Users size={16}/></span><strong>1. Cadastre clientes</strong><b>{clients.length}/{trialClientLimit}</b></div>
+                <p>Monte sua carteira de contatos</p>
+                <progress aria-label="Clientes cadastrados no teste" value={Math.min(clients.length,trialClientLimit)} max={trialClientLimit}/>
+                <button type="button" onClick={()=>setPage('clients')}>Ir para clientes <ArrowUpRight size={13}/></button>
+              </div>
+              <div className="trial-step">
+                <div className="trial-step-heading"><span className="trial-step-icon"><FileText size={16}/></span><strong>2. Crie cobranças</strong><b>{obligations.length}/3</b></div>
+                <p>Experimente os PDFs personalizados</p>
+                <progress aria-label="Cobranças criadas no teste" value={Math.min(obligations.length,3)} max={3}/>
+                <button type="button" onClick={()=>setPage('obligations')}>Ir para cobranças <ArrowUpRight size={13}/></button>
+              </div>
+              <div className="trial-step">
+                <div className="trial-step-heading"><span className="trial-step-icon"><Sparkles size={16}/></span><strong>3. Explore o painel</strong></div>
+                <p>Conheça os vencimentos e os recursos disponíveis</p>
+                <a target="_blank" rel="noopener noreferrer" href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Tenho%20interesse%20no%20ContabFlow.">Conversar sobre planos <ArrowUpRight size={13}/></a>
+              </div>
+            </div>
+          </div>}
         </section>}
         {page==='overview'&&<>
           <div className="metric-grid">
