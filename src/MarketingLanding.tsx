@@ -98,7 +98,7 @@ export default function MarketingLanding({onLogin,onLead,trial}:Props){
             <button type="submit" className="landing-cta" disabled={submitting}>
               {submitting?'Enviando acesso…':'Conhecer meu painel'} <ArrowRight size={18}/>
             </button>
-            <small><LockKeyhole size={13}/> Enviaremos um link seguro de entrada por e-mail. O teste só começa quando você ativá-lo.</small>
+            <small><LockKeyhole size={13}/> Enviaremos um link seguro de entrada por e-mail. O teste só começa quando você ativá-lo. <a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.</small>
           </form>
         </div>
       </section>
@@ -190,6 +190,6 @@ export default function MarketingLanding({onLogin,onLead,trial}:Props){
         <button type="button" className="landing-cta" onClick={focusForm}>Quero conhecer o ContabFlow <ArrowUpRight size={18}/></button></div></section>
     </main>
     <footer className="landing-footer"><div>© ContabFlow · Automação para escritórios contábeis</div>
-      <div><button type="button" onClick={onLogin}><Mail size={14}/> Já tenho acesso</button><span>Atendimento: <a href="https://wa.me/5568992097927" target="_blank" rel="noopener noreferrer">WhatsApp <ArrowUpRight size={12}/></a></span></div></footer>
+      <div><a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener noreferrer">Política de Privacidade</a><button type="button" onClick={onLogin}><Mail size={14}/> Já tenho acesso</button><span>Atendimento: <a href="https://wa.me/5568992097927" target="_blank" rel="noopener noreferrer">WhatsApp <ArrowUpRight size={12}/></a></span></div></footer>
   </div>;
 }
