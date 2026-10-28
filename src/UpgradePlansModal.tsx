@@ -57,7 +57,7 @@ export default function UpgradePlansModal({plans,currentPlan,officeName,isTrial,
           {plans.map((plan,i)=><article key={plan.code} className={'upgrade-plan '+(selected===plan.code?'selected ':'')+(i===1?'featured':'')}>
             {i===1&&<span className="upgrade-popular">MAIS CAPACIDADE</span>}
             <div className="upgrade-plan-head"><div><Wallet size={19}/><h3>{plan.name}</h3></div>
-              {currentPlan===plan.code&&<span className="upgrade-current">Plano do seu teste</span>}</div>
+              {currentPlan===plan.code&&<span className="upgrade-current">{isTrial?'Plano do seu teste':'Plano atual'}</span>}</div>
             <div className="upgrade-price">{currency(Number(plan.monthly_price_brl))}<small>/mês</small></div>
             <div className="upgrade-benefits">
               <span><Users size={15}/> Até <strong>{plan.client_limit} clientes ativos</strong></span>
