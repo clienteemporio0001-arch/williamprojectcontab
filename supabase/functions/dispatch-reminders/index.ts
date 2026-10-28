@@ -106,15 +106,27 @@ Deno.serve(async(req:Request)=>{
   // A simulação autenticada permite conferir quais cobranças seriam enviadas
   // sem contato com a Meta, gravação de logs ou geração de novas competências.
   let dryRun=false;
-  try { dryRun=(await req.json())?.dry_run===true; } catch { /* sem corpo = execução normal */ }
+  let testNow=false;
+  try{
+    const body=await req.json();
+    dryRun=body?.dry_run===true;
+    testNow=body?.test_now===true && !dryRun;
+  }catch{ /* corpo vazio = execução agendada normal */ }
+  const testOrg=Deno.env.get('WHATSAPP_TEST_ORG_ID')||'';
+  const testRecipient=Deno.env.get('WHATSAPP_TEST_RECIPIENT')||'';
+  if(testNow&&(!/^[0-9a-f-]{36}$/i.test(testOrg)||!/^55[0-9]{10,11}$/.test(testRecipient))){
+    return fail('Teste imediato exige WHATSAPP_TEST_ORG_ID e WHATSAPP_TEST_RECIPIENT válidos',400);
+  }
   const token=Deno.env.get('WHATSAPP_TOKEN');
   const phoneId=Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
   if(!dryRun&&Deno.env.get('DISPATCH_LIVE_ENABLED')!=='true')
     return fail('Envios reais desativados. Configure DISPATCH_LIVE_ENABLED=true apenas depois de testar.',503);
 
-  const stats={dryRun,organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
-  const {data:orgs,error:orgError}=await db.from('organizations')
-    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled').limit(200);
+  const stats={dryRun,testNow,organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
+  let orgQuery=db.from('organizations')
+    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled');
+  if(testNow)orgQuery=orgQuery.eq('id',testOrg);
+  const {data:orgs,error:orgError}=await orgQuery.limit(200);
   if(orgError)return fail(orgError.message);
 
   for(const org of (orgs||[]) as Org[]) {
@@ -128,7 +140,7 @@ Deno.serve(async(req:Request)=>{
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
     // Agendamento: uma vez por dia, entre 9h e 10h da manhã de cada escritório.
-    if(local.hour!==9&&!dryRun)continue;
+    if(local.hour!==9&&!dryRun&&!testNow)continue;
     stats.organizations++;
 
     // Gera a competência do mês corrente em séries recorrentes (idempotente).
@@ -141,7 +153,7 @@ Deno.serve(async(req:Request)=>{
       if(item.series_id && !latest.has(item.series_id))latest.set(item.series_id,item);
     }
     for(const item of latest.values()){
-      if(dryRun)break;
+      if(dryRun||testNow)break;
       // Quando o último documento é do mês anterior, criar a competência do mês
       // atual E a seguinte. Isso cobre também o aviso 7 dias antes quando o
       // vencimento acontece no começo do mês seguinte.
@@ -177,6 +189,7 @@ Deno.serve(async(req:Request)=>{
       const item=record as unknown as Obligation;
       const client=item.clients;
       if(!client?.active||item.amount===null){stats.skipped++;continue;}
+      if(testNow&&client.phone!==testRecipient)continue;
       const offset=dayDiff(item.due_date,local.date);
       if(!(item.reminder_offsets||[7,3,1,0]).includes(offset))continue;
       let pdf:Uint8Array|null=null;
@@ -184,6 +197,7 @@ Deno.serve(async(req:Request)=>{
 
       for(const channel of ['email','whatsapp'] as const){
         const isEmail=channel==='email';
+        if(testNow&&isEmail)continue;
         if(isEmail){
           if(!org.email_reminders_enabled || !client.email_opt_in || !client.email_opt_in_at ||
              !client.email_consent_source || !client.email?.trim())continue;
