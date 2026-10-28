@@ -91,6 +91,12 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  async function changeBilling(action:'activate'|'extend_trial'|'pending'){
    if(!supabase||!edit)return;
    const startingTrial=action==='extend_trial'&&edit.billing_status!=='trialing';
+   if(plan!==edit.plan_code||access!==edit.access_status){
+     setError('Salve primeiro as mudanças de plano ou situação de acesso antes de alterar o teste.');return;
+   }
+   if(action==='extend_trial'&&(!Number.isInteger(extendDays)||extendDays<1||extendDays>90)){
+     setError('Informe de 1 a 90 dias para o teste.');return;
+   }
    if(startingTrial){
      const message=edit.billing_status==='active'
        ?'Este escritório já possui acesso completo. Iniciar um teste grátis vai substituir esse acesso por '+extendDays+' dia(s) de avaliação, limitando o uso a '+trial.trial_max_clients+' clientes, 3 cobranças e sem disparos automáticos. Nenhum documento será excluído. Confirma?'
@@ -99,9 +105,6 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
    }
    if(action==='activate'&&!window.confirm('Liberar acesso deste escritório como assinatura ativa? Confirme o pagamento fora da plataforma.'))return;
    if(action==='pending'&&!window.confirm('Bloquear a assinatura deste escritório até regularização?'))return;
-   if(action==='extend_trial'&&(!Number.isInteger(extendDays)||extendDays<1||extendDays>90)){
-     setError('Informe de 1 a 90 dias para prorrogar.');return;
-   }
    setBusy(true);setError('');
    const {error:e}=await supabase.rpc('master_manage_subscription',{
      p_org_id:edit.id,p_action:action,p_days:action==='extend_trial'?extendDays:null
@@ -198,12 +201,16 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
     </>}
     {tab==='offices'&&<section className="master-panel">
      <div className="master-search"><Search size={18}/><input placeholder="Buscar escritório ou e-mail..." value={term} onChange={e=>setTerm(e.target.value)}/></div>
-     <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th></th></tr></thead><tbody>
-     {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td><td>{o.plan_name}</td><td>{o.clients_active}/{o.client_limit}</td><td>{o.charges_total}</td><td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span>
- <small>{o.billing_status==='trialing'?(remainingTrialDays(o.trial_ends_at||null)>0?'Teste: '+remainingTrialDays(o.trial_ends_at||null)+' dia(s)':'Teste encerrado')
- :o.billing_status==='pending'?'Aguardando liberação':o.billing_status==='active'?'Acesso completo liberado':'Configuração pendente'}</small></td>
- <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
-     {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
+     <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO COMERCIAL</th><th>TESTE / ASSINATURA</th><th>CLIENTES</th><th>COBRANÇAS</th><th>ACESSO</th><th></th></tr></thead><tbody>
+     {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td>
+       <td>{o.plan_name}</td>
+       <td><span className={'master-account-state-badge '+(o.billing_status||'unknown')}>{trialLabel(o)}</span>
+         {o.billing_status==='trialing'&&o.trial_ends_at&&<small>Vence {new Date(o.trial_ends_at).toLocaleDateString('pt-BR')}</small>}</td>
+       <td>{o.clients_active}/{o.billing_status==='trialing'?Math.min(o.client_limit,trial.trial_max_clients):o.client_limit}</td>
+       <td>{o.charges_total}</td>
+       <td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span></td>
+       <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
+     {!visible.length&&<tr><td colSpan={7}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
     {tab==='monitor'&&<div className="master-monitor">
       {monitorError&&<div className="master-alert">{monitorError}</div>}
