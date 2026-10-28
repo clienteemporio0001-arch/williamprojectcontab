@@ -261,14 +261,25 @@ export default function App() {
     const number=phoneDigits(clientDraft.phone);
     const phone=number.startsWith('55')?number:'55'+number;
     if(!/^55\d{10,11}$/.test(phone)) {setError('Informe um WhatsApp válido com DDD. Exemplo: 68 99999-9999.');return;}
-    if(clientDraft.opt_in && !clientDraft.consent_source?.trim()) {setError('Registre a origem da autorização para mensagens.');return;}
+    if(clientDraft.opt_in && !clientDraft.consent_source?.trim()) {setError('Registre a origem da autorização para WhatsApp.');return;}
+    const recipientEmail=clientDraft.email?.trim().toLowerCase()||'';
+    if(recipientEmail&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)){
+      setError('Informe um e-mail válido.');return;
+    }
+    if(clientDraft.email_opt_in&&(!recipientEmail||!clientDraft.email_consent_source?.trim())){
+      setError('Para ativar e-mail, informe o endereço e registre a origem da autorização.');return;
+    }
     setSaving(true);setError('');
     const payload:Client = {
       id:clientDraft.id || crypto.randomUUID(),name:clientDraft.name.trim(),
       company:clientDraft.company.trim(),tax_id:clientDraft.tax_id?.trim()||null,phone,
       opt_in:clientDraft.opt_in, active:clientDraft.active,
       opt_in_at:clientDraft.opt_in?clientDraft.opt_in_at || new Date().toISOString():null,
-      consent_source:clientDraft.opt_in?clientDraft.consent_source?.trim()||null:null
+      consent_source:clientDraft.opt_in?clientDraft.consent_source?.trim()||null:null,
+      email:recipientEmail||null,
+      email_opt_in:clientDraft.email_opt_in===true,
+      email_opt_in_at:clientDraft.email_opt_in?(clientDraft.email_opt_in_at||new Date().toISOString()):null,
+      email_consent_source:clientDraft.email_opt_in?(clientDraft.email_consent_source?.trim()||null):null
     };
     if(demo) setClients(prev=>clientDraft.id?prev.map(x=>x.id===payload.id?payload:x):[payload,...prev]);
     else if(supabase && workspace) {
@@ -320,9 +331,16 @@ export default function App() {
   async function saveSettings(e:FormEvent) {
     e.preventDefault();
     if(supabase&&workspace) {
-      const {error:e}=await supabase.from('organizations').update({name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact}).eq('id',workspace.id);
+      const {error:e}=await supabase.from('organizations').update({name:workspaceName,message_template:messageTemplate,
+        tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact,
+        email_reminders_enabled:workspace.billing_status==='active'&&emailRemindersEnabled,
+        whatsapp_reminders_enabled:workspace.billing_status==='active'&&whatsappRemindersEnabled
+      }).eq('id',workspace.id);
       if(e){setError(e.message);return;}
-      setWorkspace({...workspace,name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,pix_key:pixKey,billing_contact:billingContact});
+      setWorkspace({...workspace,name:workspaceName,message_template:messageTemplate,tax_id:officeTaxId,
+        pix_key:pixKey,billing_contact:billingContact,
+        email_reminders_enabled:workspace.billing_status==='active'&&emailRemindersEnabled,
+        whatsapp_reminders_enabled:workspace.billing_status==='active'&&whatsappRemindersEnabled});
     }
     notify('Preferências salvas.');
   }
@@ -388,6 +406,8 @@ export default function App() {
       if(fetchError||!org)throw Error('Escritório criado. Atualize a página: '+(fetchError?.message||'não encontrado'));
       setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);
       setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');
+      setEmailRemindersEnabled(Boolean(org.email_reminders_enabled));
+      setWhatsappRemindersEnabled(Boolean(org.whatsapp_reminders_enabled));
       setPage('overview');
     }catch(e){setError(e instanceof Error?e.message:String(e));}
     finally{setSaving(false);}
