@@ -12,6 +12,7 @@ import MarketingLanding from './MarketingLanding';
 import ProspectWelcome from './ProspectWelcome';
 import UpgradePlansModal,{type UpgradePlan} from './UpgradePlansModal';
 import WhatsAppSupport from './WhatsAppSupport';
+import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
 import {normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
 import {
@@ -74,6 +75,7 @@ export default function App() {
   const [billingContact,setBillingContact] = useState(() => readDemo('contabflow_contact_v2',''));
   const [emailRemindersEnabled,setEmailRemindersEnabled] = useState(false);
   const [whatsappRemindersEnabled,setWhatsappRemindersEnabled] = useState(false);
+  const [whatsappConnected,setWhatsappConnected] = useState(false);
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
@@ -666,8 +668,8 @@ export default function App() {
               <textarea id="template" rows={7} value={messageTemplate} onChange={e=>setMessageTemplate(e.target.value)}/><p className="field-hint">Variáveis: <code>{'{nome}'}</code>, <code>{'{cliente}'}</code>, <code>{'{empresa}'}</code>, <code>{'{documento}'}</code>, <code>{'{vencimento}'}</code>, <code>{'{valor}'}</code> e <code>{'{link}'}</code>.</p>
             </div><button className="btn primary"><Check size={17}/>Salvar alterações</button></form>
         </section><section className="panel settings-card"><div className="panel-heading"><div><h2>Integração WhatsApp</h2><p>API oficial da Meta</p></div><MessageCircle size={19}/></div>
-          <div className="integration-status"><span className="integration-icon"><ShieldCheck/></span><div><strong>Integração por servidor</strong><p>Credenciais e templates são configurados no Supabase, nunca expostos no navegador.</p></div></div>
-          <p className="subtle small">O botão do WhatsApp nas obrigações abre uma mensagem manual pré-preenchida. Isso não confirma envio e não substitui a integração automática.</p>
+          <WhatsAppConnectionPanel orgId={workspace?.id||null} onStatusChange={setWhatsappConnected}/>
+          <p className="subtle small">O botão de WhatsApp nas cobranças abre uma mensagem manual pré-preenchida. O disparo automático exige o número do escritório conectado à API, modelo aprovado e cron.</p>
           <a className="external-link" href="https://business.whatsapp.com/" target="_blank" rel="noreferrer">Documentação da plataforma <ArrowUpRight size={16}/></a>
         </section></div>}
       </div>
