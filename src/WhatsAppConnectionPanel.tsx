@@ -53,7 +53,7 @@ export default function WhatsAppConnectionPanel({
   const [status,setStatus]=useState<ConnectionState|null>(null);
   const [error,setError]=useState('');
   const [existingBusinessApp,setExistingBusinessApp]=useState(false);
-  const info=useRef<{code?:string;accessToken?:string;waba?:string;phone?:string}>({});
+  const info=useRef<{code?:string;waba?:string;phone?:string}>({});
   const submitting=useRef(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const sessionTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -127,14 +127,14 @@ export default function WhatsAppConnectionPanel({
   },[configured]);
 
   const attemptComplete=useCallback(async()=>{
-    const {code,accessToken,waba='',phone=''}=info.current;
-    if((!accessToken&&!code)||!orgId||!supabase||submitting.current)return;
+    const {code,waba='',phone=''}=info.current;
+    if(!code||!orgId||!supabase||submitting.current)return;
     submitting.current=true;
     const activeFlow=flowId.current;
     setProgress('Autorização recebida. Registrando o número com segurança...');
     try{
       const {data,error:e}=await supabase.functions.invoke('whatsapp-connect',{
-        body:{action:'connect',org_id:orgId,...(accessToken?{access_token:accessToken}:{code}),waba_id:waba,phone_number_id:phone}
+        body:{action:'connect',org_id:orgId,code,waba_id:waba,phone_number_id:phone}
       });
       if(e||data?.error)throw Error(data?.error||
         await invokeErrorMessage(e,'O servidor não conseguiu finalizar a conexão. Confira sua conta no Supabase.'));
@@ -208,14 +208,14 @@ export default function WhatsAppConnectionPanel({
     try{
       window.FB.login((response)=>{
         if(activeFlow!==flowId.current)return;
-        const accessToken=response?.authResponse?.accessToken;
         const code=response?.authResponse?.code||response?.code;
-        if(!accessToken&&!code){
-          stopFlow('A Meta não concluiu a autorização. Confira a janela do Facebook, as permissões e o cadastro do número.');
+        if(!code){
+          stopFlow(response?.authResponse?.accessToken?
+            'A Meta retornou um token de login, mas não o código de autorização exigido. Verifique a configuração Embedded Signup no Meta for Developers.':
+            'A Meta não concluiu a autorização. Confira a janela do Facebook, as permissões e o cadastro do número.');
           return;
         }
-        // Um token retornado pelo SDK é enviado somente à Edge Function, onde será validado contra o app e a WABA.
-        info.current={...info.current,...(accessToken?{accessToken}:{code})};
+        info.current={...info.current,code};
         setProgress(info.current.waba?
           'Autorização e conta WhatsApp recebidas. Concluindo conexão...':
           'Login autorizado. Verificando se a Meta concedeu acesso a um número WhatsApp...');
@@ -227,11 +227,12 @@ export default function WhatsAppConnectionPanel({
             void attemptComplete();
           },MISSING_WHATSAPP_SESSION_MS);
         }
-        else void attemptComplete();
+        void attemptComplete();
       },{
         config_id:configId,
         auth_type:'rerequest',
-        // O fluxo de código do SDK causou OAuth 36008 nesta configuração; usar resposta de token validada no servidor.
+        response_type:'code',
+        override_default_response_type:true,
         extras:existingBusinessApp
           ?{setup:{},featureType:'whatsapp_business_app_onboarding'}
           :{setup:{}}
