@@ -1,6 +1,7 @@
 // Edge Function: envio por e-mail (Resend) e WhatsApp Cloud API (Meta).
 // Configure verify_jwt=false, CRON_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-// WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_TEMPLATE_NAME.
+// WHATSAPP_CREDENTIAL_KEY (segredo servidor), WHATSAPP_TEMPLATE_NAME.
+// Os tokens e Phone Number IDs são individuais por escritório, nunca globais.
 // Nunca inclua essas credenciais no código do navegador.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { createChargePdf } from '../_shared/billing_pdf.ts';
@@ -42,7 +43,7 @@ function formatBRL(n:number|null){
 async function sendDocument(phone:string,values:string[],bytes:Uint8Array,filename:string,token:string,phoneId:string) {
   const template=Deno.env.get('WHATSAPP_TEMPLATE_NAME')||'cobranca_honorarios_pdf';
   const lang=Deno.env.get('WHATSAPP_TEMPLATE_LANG')||'pt_BR';
-  const version=Deno.env.get('WHATSAPP_GRAPH_VERSION')||'v23.0';
+  const version=Deno.env.get('WHATSAPP_GRAPH_VERSION')||'v26.0';
   if(!token||!phoneId)throw new Error('WhatsApp não configurado');
   // Faz upload privado do PDF para a Cloud API; não expõe links fiscais públicos.
   const form=new FormData();
