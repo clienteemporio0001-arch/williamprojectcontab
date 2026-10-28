@@ -470,7 +470,7 @@ export default function App() {
         </div></div>
     </aside>
     {menuOpen&&<button className="sidebar-backdrop" aria-label="Fechar navegação" onClick={()=>setMenuOpen(false)}/>}
-    <main className="main">
+    <main className={'main'+(page==='overview'?' overview-main':'')}>
       <header className="topbar"><button className="icon-button menu-toggle" title="Abrir menu" onClick={()=>setMenuOpen(true)}><Menu size={22}/></button>
         <div className="crumb"><span>Área de trabalho</span><span className="crumb-arrow">/</span><strong>{title}</strong></div>
         <div className="top-right"><span className="today-pill"><Clock3 size={15}/>{new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(new Date())}</span><span className="mini-avatar">{orgLabel[0]?.toUpperCase()||'C'}</span></div>
