@@ -57,6 +57,9 @@ export default function WhatsAppConnectionPanel({
   const [testConsent,setTestConsent]=useState(false);
   const [testSending,setTestSending]=useState(false);
   const [testFeedback,setTestFeedback]=useState<{ok:boolean;message:string}|null>(null);
+  const [testChecking,setTestChecking]=useState(false);
+  const [testDelivery,setTestDelivery]=useState<{status:string;error_code?:string|null;recipient_last4?:string}|null>(null);
+  const [testDeliveryNotice,setTestDeliveryNotice]=useState('');
   const info=useRef<{code?:string;waba?:string;phone?:string}>({});
   const submitting=useRef(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -240,9 +243,30 @@ export default function WhatsAppConnectionPanel({
     popup.location.href=oauth.toString();
   }
 
+  async function checkTestDelivery(){
+    if(!supabase||!orgId||testChecking||busy)return;
+    setTestChecking(true);
+    setTestDeliveryNotice('');
+    try{
+      const {data,error:e}=await supabase.functions.invoke('whatsapp-test-send',{
+        body:{action:'status',org_id:orgId}
+      });
+      if(e||data?.error)throw Error(data?.error||await invokeErrorMessage(e,'Falha ao consultar o status do teste.'));
+      const last=data?.test;
+      if(!last){setTestDelivery(null);setTestDeliveryNotice('Ainda não existe teste de envio registrado.');return;}
+      setTestDelivery({status:String(last.status||''),error_code:last.error_code||null,recipient_last4:String(last.recipient_last4||'')});
+    }catch(e){
+      setTestDeliveryNotice(e instanceof Error?e.message:'Não foi possível consultar a entrega.');
+    }finally{
+      setTestChecking(false);
+    }
+  }
+
   async function sendTest(){
     if(!supabase||!orgId||status?.connection_status!=='connected'||testSending)return;
     setTestFeedback(null);
+    setTestDelivery(null);
+    setTestDeliveryNotice('');
     const digits=testPhone.replace(/\D/g,'');
     const normalized=digits.length===10||digits.length===11?'55'+digits:digits;
     if(!/^55\d{10,11}$/.test(normalized)){
@@ -339,6 +363,20 @@ export default function WhatsAppConnectionPanel({
         {testSending?'Enviando teste...':'Enviar mensagem de teste'}
       </button>
       {testFeedback&&<p role="status" style={{color:testFeedback.ok?'#57e3b0':'#ff9a9a',margin:0}}>{testFeedback.message}</p>}
+      <button type="button" className="btn soft" onClick={()=>void checkTestDelivery()} disabled={testChecking||testSending||busy}>
+        {testChecking?<Loader2 size={16}/>:<CheckCircle2 size={16}/>}
+        {testChecking?'Consultando...':'Consultar entrega do último teste'}
+      </button>
+      {testDelivery&&<p role="status" style={{margin:0,color:testDelivery.status==='failed'?'#ff9a9a':testDelivery.status==='delivered'||testDelivery.status==='read'?'#57e3b0':'#bed2e5'}}>
+        {testDelivery.status==='read'?'Mensagem lida pelo destinatário.':
+         testDelivery.status==='delivered'?'Mensagem entregue ao WhatsApp do destinatário.':
+         testDelivery.status==='sent'?'Mensagem enviada pela Meta; aguardando confirmação de entrega.':
+         testDelivery.status==='failed'?'A Meta informou falha na entrega'+(testDelivery.error_code?' (código '+testDelivery.error_code+')':'')+'.':
+         testDelivery.status==='accepted'?'Mensagem aceita pela Meta; ainda sem confirmação de envio ou entrega.':
+         'Teste em processamento.'}
+        {' Número final '+(testDelivery.recipient_last4||'----')+'.'}
+      </p>}
+      {testDeliveryNotice&&<p className="subtle small" role="status" style={{margin:0}}>{testDeliveryNotice}</p>}
       <p className="subtle small">Limite de segurança: 3 testes por dia e intervalo mínimo de 5 minutos. A Meta pode restringir o número de teste a destinatários previamente verificados.</p>
     </section>}
     {status&&!busy&&<button type="button" className="btn ghost" onClick={disconnect}>
