@@ -1,6 +1,10 @@
 -- CONTABFLOW: Conexão WhatsApp por escritório
 -- Execute após Etapa 9. Credenciais NUNCA são armazenadas em texto no navegador.
 BEGIN;
+-- A Edge Function valida o owner e opera com service_role. RLS por si nao concede GRANT.
+GRANT SELECT ON TABLE public.organization_members TO service_role;
+GRANT SELECT, UPDATE ON TABLE public.organizations TO service_role;
+
 CREATE SCHEMA IF NOT EXISTS extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
