@@ -403,77 +403,35 @@ export default function App() {
   const trialClientLimit=trialSettings.trial_max_clients||3;
   const canAddTrialClient=!isTrial||clients.length<trialClientLimit;
   const canAddTrialCharge=!isTrial||obligations.length<3;
-  const passwordMatch = authPasswordConfirm.length > 0 && authPassword === authPasswordConfirm;
-  const passwordMismatch = authPasswordConfirm.length > 0 && authPassword !== authPasswordConfirm;
-
   if(checkingAuth)return <div className="splash"><div className="logo-mark"><CalendarClock size={30}/></div><p>Preparando seu painel…</p></div>;
   if(!demo&&!session&&publicScreen==='landing')return <>
-    <MarketingLanding trial={trialSettings}
-      onLogin={()=>{setAuthMode('login');setPublicScreen('auth');setError('');}}
-      onSignup={(planCode)=>{setSignupPlan(planCode||'');setAuthMode('signup');setPublicScreen('auth');setError('');}}/>
+    <MarketingLanding trial={trialSettings} onLogin={()=>{setPublicScreen('auth');setError('');}}
+      onLead={submitEmailLead}/>
     <WhatsAppSupport/>
   </>;
-  if(!demo&&!session)return <><div className="auth-wrap"><div className={'auth-card '+(authMode==='signup'?'auth-card-signup':'')}>
-    <div className="brand"><span className="logo-mark"><CalendarClock size={24}/></span><span>contab<span className="brand-accent">flow</span><small>GESTÃO CONTÁBIL INTELIGENTE</small></span></div>
+  if(!demo&&!session)return <><div className="auth-wrap"><div className="auth-card">
+    <div className="brand"><span className="logo-mark"><CalendarClock size={24}/></span>
+      <span>contab<span className="brand-accent">flow</span><small>GESTÃO CONTÁBIL INTELIGENTE</small></span></div>
     <div className="auth-kicker">SEU ESCRITÓRIO MAIS PRODUTIVO</div>
-    <h1>{authMode==='login'?'Bem-vindo de volta':'Crie sua conta de contador'}</h1>
-    <p className="subtle">{authMode==='login'?'Entre para acompanhar seus clientes e cobranças.':'Cadastre seu escritório para começar a automatizar cobranças contábeis.'}</p>
+    <h1>Entre no seu painel</h1><p className="subtle">Use sua senha atual ou receba um link seguro por e-mail.</p>
     <form onSubmit={submitAuth} className="stack gap-lg">
-      {authMode==='signup'&&<>
-        <div className="register-section">RESPONSÁVEL PELO ESCRITÓRIO</div>
-        <div className="register-grid">
-          <label>Nome completo *<input autoComplete="name" required minLength={3} maxLength={120} value={signupName} onChange={e=>setSignupName(e.target.value)} placeholder="Ex.: João da Silva"/></label>
-          <label>WhatsApp profissional *<input type="tel" autoComplete="tel" required value={signupPhone} onChange={e=>setSignupPhone(e.target.value)} placeholder="(68) 99999-9999"/></label>
-        </div>
-        <div className="register-section">DADOS DO ESCRITÓRIO</div>
-        <div className="register-grid-office">
-          <label>Nome do escritório *<input required minLength={2} maxLength={100} value={signupOffice} onChange={e=>setSignupOffice(e.target.value)} placeholder="Ex.: Silva Contabilidade"/></label>
-          <label>CNPJ <span className="register-optional">(opcional)</span><input inputMode="numeric" maxLength={18} value={signupTaxId} onChange={e=>setSignupTaxId(e.target.value)} placeholder="00.000.000/0001-00"/></label>
-          <label>CRC <span className="register-optional">(opcional)</span><input maxLength={35} value={signupCRC} onChange={e=>setSignupCRC(e.target.value)} placeholder="Ex.: AC-012345/O"/></label>
-        </div>
-        <div className="register-section">ESCOLHA SEU PLANO</div>
-        <div className="signup-plan-grid" role="radiogroup" aria-label="Plano de assinatura">
-          {signupPlans.map(p=><label key={p.code} className={'signup-plan-option '+(signupPlan===p.code?'selected':'')}>
-            <input type="radio" name="signup-plan" value={p.code} checked={signupPlan===p.code}
-              onChange={()=>setSignupPlan(p.code)} required/>
-            <span><strong>{p.name}</strong><small>Até {p.client_limit} clientes no plano pago</small></span>
-            <b>{new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(p.monthly_price_brl))}<small>/mês</small></b>
-          </label>)}
-        </div>
-        {signupPlansError&&<p className="form-error" role="alert">Não foi possível carregar os planos. Atualize a página para tentar novamente.</p>}
-        {!signupPlansError&&!signupPlans.length&&<p className="register-help">Carregando planos disponíveis...</p>}
-        <p className="signup-trial-note">{trialSettings.trial_enabled
-          ?'Teste grátis de '+trialSettings.trial_days+' dias: até '+trialSettings.trial_max_clients+' clientes e 3 cobranças. Sem cobrança automática ao término.'
-          :'Após o cadastro, seu escritório ficará aguardando liberação. Nenhum valor será cobrado automaticamente.'}</p>
-        <div className="register-section">ACESSO À PLATAFORMA</div>
-      </>}
-      <label>E-mail *<input type="email" autoComplete="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
-      <div className={authMode==='signup'?'register-grid':''}>
-        <label>Senha *
-          <span className="password-field">
-            <input type={showPassword?'text':'password'} autoComplete={authMode==='signup'?'new-password':'current-password'} required minLength={authMode==='signup'?8:6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder={authMode==='signup'?'Mínimo de 8 caracteres':'Sua senha de acesso'}/>
-            <button type="button" className="password-toggle" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?'Ocultar senha':'Mostrar senha'} aria-pressed={showPassword} title={showPassword?'Ocultar senha':'Mostrar senha'}>{showPassword?<EyeOff size={19}/>:<Eye size={19}/>}</button>
-          </span>
-        </label>
-        {authMode==='signup'&&<label>Confirmar senha *
-          <span className="password-field">
-            <input type={showConfirmPassword?'text':'password'} required autoComplete="new-password" minLength={8} value={authPasswordConfirm} onChange={e=>setAuthPasswordConfirm(e.target.value)} placeholder="Repita a mesma senha" aria-invalid={passwordMismatch}/>
-            <button type="button" className="password-toggle" onClick={()=>setShowConfirmPassword(v=>!v)} aria-label={showConfirmPassword?'Ocultar confirmação de senha':'Mostrar confirmação de senha'} aria-pressed={showConfirmPassword} title={showConfirmPassword?'Ocultar confirmação':'Mostrar confirmação'}>{showConfirmPassword?<EyeOff size={19}/>:<Eye size={19}/>}</button>
-          </span>
-        </label>}
-      </div>
-      {authMode==='signup'&&<div className="password-check" aria-live="polite">
-        {passwordMatch?<span className="password-ok"><CheckCircle2 size={16}/> As senhas coincidem</span>
-          :passwordMismatch?<span className="password-error"><AlertTriangle size={16}/> As senhas não coincidem</span>
-          :<span className="password-pending">Digite a senha novamente para confirmar.</span>}
-      </div>}
-      {authMode==='signup'&&<p className="register-help">Sua senha não será armazenada no painel. O acesso é protegido pela autenticação do Supabase.</p>}
+      <label>E-mail *<input type="email" autoComplete="email" required value={authEmail}
+        onChange={e=>setAuthEmail(e.target.value)} placeholder="voce@escritorio.com.br"/></label>
+      <label>Senha <span className="password-field">
+        <input type={showPassword?'text':'password'} autoComplete="current-password" required minLength={6}
+          value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder="Sua senha"/>
+        <button type="button" className="password-toggle" onClick={()=>setShowPassword(v=>!v)}
+          aria-label={showPassword?'Ocultar senha':'Mostrar senha'}>{showPassword?<EyeOff size={19}/>:<Eye size={19}/>}</button>
+      </span></label>
       {error&&<p role="alert" className="form-error">{error}</p>}
       {authNotice&&<div className="auth-notice" role="status"><CheckCircle2 size={18}/><span>{authNotice}</span></div>}
-      <button disabled={saving||(authMode==='signup'&&(!signupPlans.some(p=>p.code===signupPlan)||!passwordMatch||authPassword.length<8))} className="btn primary block">{saving?'Aguarde…':authMode==='login'?'Entrar na plataforma':'Criar minha conta'}</button>
+      <button disabled={saving} className="btn primary block">{saving?'Entrando…':'Entrar na plataforma'}</button>
+      <button type="button" className="btn soft block" onClick={()=>void sendEmailLogin()} disabled={emailLoginBusy}>
+        {emailLoginBusy?'Enviando link…':'Entrar com link por e-mail'}</button>
     </form>
-    <p className="auth-toggle">{authMode==='login'?'Ainda não tem conta?':'Já possui uma conta?'} <button type="button" className="link-button" onClick={()=>{setAuthMode(authMode==='login'?'signup':'login');setError('');setAuthNotice('');setAuthPassword('');setAuthPasswordConfirm('');setShowPassword(false);setShowConfirmPassword(false);}}>{authMode==='login'?'Cadastre-se':'Fazer login'}</button></p>
-    <button type="button" className="public-back" onClick={()=>setPublicScreen('landing')}>← Voltar ao início</button>
+    <p className="auth-toggle">Primeiro acesso? <button type="button" className="link-button"
+      onClick={()=>{setPublicScreen('landing');setError('');}}>Criar meu acesso</button></p>
+    <button type="button" className="public-back" onClick={()=>setPublicScreen('landing')}>← Voltar à página inicial</button>
   </div></div><WhatsAppSupport/></>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
