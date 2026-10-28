@@ -48,6 +48,8 @@ jobs:
           GITHUB_PAGES: 'true'
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_META_APP_ID: ${{ vars.VITE_META_APP_ID }}
+          VITE_META_CONFIG_ID: ${{ vars.VITE_META_CONFIG_ID }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
