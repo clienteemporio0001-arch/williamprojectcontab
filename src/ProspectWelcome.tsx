@@ -1,5 +1,5 @@
 import {useState,type FormEvent} from 'react';
-import {ArrowRight,CalendarClock,CheckCircle2,Clock3,FileText,LayoutDashboard,LockKeyhole,LogOut,ShieldCheck,Sparkles,Users,Wallet} from 'lucide-react';
+import {ArrowRight,CalendarClock,CheckCircle2,Clock3,FileText,LayoutDashboard,ShieldCheck,ArrowRight} from 'lucide-react';
 import type {TrialSettings} from './lib/trial';
 import './styles.css';
 
