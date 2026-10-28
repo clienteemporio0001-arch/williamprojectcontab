@@ -40,7 +40,7 @@ CREATE INDEX IF NOT EXISTS reminder_logs_channel_status
 -- Protege campos de assinatura contra alteração direta de um assinante.
 -- Admin Master segue usando seus RPCs auditados; service role interna continua autorizada.
 CREATE OR REPLACE FUNCTION public.guard_org_billing_fields()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 BEGIN
   IF auth.uid() IS NOT NULL AND NOT public.is_master_admin() AND (
     NEW.plan_code IS DISTINCT FROM OLD.plan_code
@@ -54,7 +54,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 DROP TRIGGER IF EXISTS organizations_guard_billing_fields ON public.organizations;
 CREATE TRIGGER organizations_guard_billing_fields
  BEFORE UPDATE ON public.organizations FOR EACH ROW
