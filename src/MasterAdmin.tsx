@@ -12,6 +12,9 @@ type Props={canOpenOffice:boolean;onOpenOffice:()=>void};
 type Signup={user_id:string;email:string|null;full_name:string|null;declared_office_name:string|null;registered_at:string;verified:boolean;last_sign_in_at:string|null;org_id:string|null;office_name:string|null;billing_status:'active'|'trialing'|'pending'|null;access_status:string|null;trial_ends_at:string|null;selected_plan_code?:string|null;plan_code?:string|null};
 type MonitorEvent={id:number;org_id:string;actor_user_id:string|null;event_type:string;entity_id:string|null;occurred_at:string;office_name:string};
 type MonitorData={registrations:Signup[];activities:MonitorEvent[]};
+type UpgradeRequest={id:string;org_id:string;plan_code:string;plan_name:string;price_brl:number;
+ status:'pending'|'approved'|'rejected';created_at:string;reviewed_at:string|null;
+ office_name:string;requester_email:string|null};
 const EVENT_LABELS:Record<string,string>={
  client_created:'Cliente cadastrado',client_updated:'Cliente atualizado',client_deleted:'Cliente excluído',
  charge_created:'Cobrança criada',charge_updated:'Cobrança atualizada',charge_deleted:'Cobrança excluída',
@@ -26,7 +29,7 @@ const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;acce
   :o.billing_status==='active'?'Acesso completo liberado':'Situação do teste indisponível';
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
- const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'>('home');
+ const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'|'upgrades'>('home');
  const [data,setData]=useState<Data>({organizations:[],plans:[]});
  const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
  const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
@@ -44,6 +47,38 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [monitorError,setMonitorError]=useState('');
  const [monitorOffice,setMonitorOffice]=useState<string>('all');
  const [monitorLoading,setMonitorLoading]=useState(false);
+ const [upgradeRequests,setUpgradeRequests]=useState<UpgradeRequest[]>([]);
+ const [upgradeSetupError,setUpgradeSetupError]=useState('');
+ const [upgradeBusy,setUpgradeBusy]=useState(false);
+ const loadUpgrades=useCallback(async()=>{
+  if(!supabase)return;
+  const {data:result,error:e}=await supabase.rpc('master_list_upgrade_requests');
+  if(e){setUpgradeSetupError('Instale a Etapa 8 (pedidos de contratação) no SQL Editor para receber solicitações.');
+    return;}
+  setUpgradeSetupError('');
+  setUpgradeRequests(Array.isArray(result)?result as UpgradeRequest[]:[]);
+ },[]);
+ useEffect(()=>{void loadUpgrades();},[loadUpgrades]);
+ useEffect(()=>{
+   const timer=window.setInterval(()=>{void loadUpgrades();},60000);
+   return()=>window.clearInterval(timer);
+ },[loadUpgrades]);
+ async function reviewUpgrade(request:UpgradeRequest,approve:boolean){
+  if(!supabase||upgradeBusy||request.status!=='pending')return;
+  const confirmation=approve
+   ?'Você conferiu e recebeu o pagamento de '+brl(Number(request.price_brl))+' referente ao pedido de '+request.office_name+'? Ao confirmar, o teste será encerrado e o plano '+request.plan_name+' será liberado.'
+   :'Rejeitar o pedido de '+request.office_name+'? O acesso atual do escritório será preservado.';
+  if(!window.confirm(confirmation))return;
+  setUpgradeBusy(true);setError('');
+  const {error:e}=await supabase.rpc('master_review_upgrade_request',{
+   p_request_id:request.id,p_approve:approve
+  });
+  setUpgradeBusy(false);
+  if(e){setError('Falha ao avaliar contratação: '+e.message);return;}
+  setNotice(approve?'Pagamento confirmado e acesso liberado conforme o plano escolhido.':'Pedido rejeitado, sem alterar o acesso.');
+  await Promise.all([loadUpgrades(),reload()]);
+ }
+
  const reload=useCallback(async()=>{if(!supabase)return;setBusy(true);setError('');
   const {data:result,error:e}=await supabase.rpc('master_dashboard');
   if(e)setError('Não foi possível consultar o Admin Master: '+e.message);
@@ -114,6 +149,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
    setNotice(startingTrial?'Teste grátis iniciado e registrado no histórico.':'Acesso do escritório atualizado com registro de auditoria.');
  }
 
+ const pendingUpgrades=upgradeRequests.filter(r=>r.status==='pending');
  const offices=data.organizations;
  const active=offices.filter(o=>o.access_status==='active');
  const paying=active.filter(o=>o.billing_status==='active');
@@ -171,14 +207,16 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length}</small></button>
   <button className={tab==='plans'?'current':''} onClick={()=>setTab('plans')}><Settings2 size={18}/>Planos SaaS</button>
   <button className={tab==='monitor'?'current':''} onClick={()=>setTab('monitor')}><Activity size={18}/>Cadastros e atividades <small>{pendingSignups.length}</small></button>
+  <button className={tab==='upgrades'?'current':''} onClick={()=>{setTab('upgrades');void loadUpgrades();}}>
+    <Wallet size={18}/>Contratações <small>{pendingUpgrades.length}</small></button>
   <div className="master-sidefoot"><div><LockKeyhole size={17}/> Área restrita ao administrador da plataforma</div>
    {canOpenOffice&&<button onClick={onOpenOffice}><Building2 size={17}/>Painel do contador</button>}
    <button onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={17}/>Sair</button>
   </div></aside>
-  <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>{void reload();void loadMonitor();}}><RefreshCw size={16}/>Atualizar</button></header>
+  <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>{void reload();void loadMonitor();void loadUpgrades();}}><RefreshCw size={16}/>Atualizar</button></header>
    <div className="master-inner"><p className="master-eyebrow">PAINEL ADMINISTRATIVO</p>
-    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e teste grátis':'Cadastros e atividades'}</h1>
-    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Edite os valores e personalize o teste gratuito dos planos.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
+    <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e teste grátis':tab==='upgrades'?'Pedidos de contratação':'Cadastros e atividades'}</h1>
+    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Edite os valores e personalize o teste gratuito dos planos.':tab==='upgrades'?'Confirme pagamentos recebidos e libere os planos solicitados.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
     {error&&<div className="master-alert">{error}</div>}{notice&&<div className="master-alert success">{notice}</div>}
     {busy&&<p className="master-loading">Atualizando informações…</p>}
     {tab==='home'&&<>
@@ -186,7 +224,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
        <button onClick={()=>setTab('plans')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
        <button onClick={()=>setTab('plans')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Pré-teste · sem prazo iniciado <strong>{pendingSignups.length}</strong></button>
-       <button onClick={()=>setTab('monitor')}><Activity size={17}/> Ações recentes <strong>{monitor.activities.length}</strong></button>
+       <button onClick={()=>setTab('upgrades')}><Wallet size={17}/> Contratações pendentes <strong>{pendingUpgrades.length}</strong></button>
      </div>
      <div className="master-kpis">
       <article><span>Escritórios <Building2 size={18}/></span><strong>{offices.length}</strong><small>{active.length} ativos</small></article>
@@ -212,6 +250,31 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
        <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
      {!visible.length&&<tr><td colSpan={7}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
+    {tab==='upgrades'&&<section className="master-panel">
+       <div className="master-panelhead">
+         <h2>Solicitações de planos ({upgradeRequests.length})</h2>
+         <button onClick={()=>void loadUpgrades()}><RefreshCw size={15}/> Atualizar</button>
+       </div>
+       {upgradeSetupError&&<div className="master-upgrade-notice">{upgradeSetupError}</div>}
+       <div className="master-upgrade-advice"><ShieldCheck size={17}/>
+         <span><strong>Somente confirme após verificar o pagamento.</strong> O pedido por si só não significa pagamento recebido; a confirmação libera o acesso completo e aplica o limite do plano escolhido.</span>
+       </div>
+       <div className="master-tablewrap"><table><thead><tr>
+         <th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO</th><th>MENSALIDADE INFORMADA</th><th>DATA</th><th>STATUS</th><th>AÇÕES</th>
+       </tr></thead><tbody>
+         {upgradeRequests.map(r=><tr key={r.id}>
+          <td><strong>{r.office_name}</strong><small>{r.requester_email||'Sem e-mail'}</small>
+            <small>Pedido #{r.id.slice(0,8).toUpperCase()}</small></td>
+          <td>{r.plan_name}</td><td>{brl(Number(r.price_brl))}</td><td>{timestamp(r.created_at)}</td>
+          <td><span className={'master-order-status '+r.status}>{r.status==='pending'?'Aguardando pagamento':r.status==='approved'?'Aprovado':'Rejeitado'}</span></td>
+          <td>{r.status==='pending'?<div className="master-order-actions">
+            <button type="button" disabled={upgradeBusy} onClick={()=>void reviewUpgrade(r,true)}>Pagamento recebido</button>
+            <button type="button" disabled={upgradeBusy} className="reject" onClick={()=>void reviewUpgrade(r,false)}>Rejeitar</button>
+          </div>:<span>{r.reviewed_at?'Avaliado '+timestamp(r.reviewed_at):'Concluído'}</span>}</td>
+         </tr>)}
+         {!upgradeRequests.length&&<tr><td colSpan={6}>Nenhuma solicitação registrada.</td></tr>}
+       </tbody></table></div>
+     </section>}
     {tab==='monitor'&&<div className="master-monitor">
       {monitorError&&<div className="master-alert">{monitorError}</div>}
       <div className="master-monitor-tools">
