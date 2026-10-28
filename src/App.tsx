@@ -435,17 +435,15 @@ export default function App() {
   </div></div><WhatsAppSupport/></>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
-  if(!demo&&!workspace)return <><div className="auth-wrap"><div className="auth-card">
-    <div className="brand"><span className="logo-mark"><Building2/></span><span>contab<span className="brand-accent">flow</span></span></div>
-    <h1>Vamos criar seu escritório</h1><p className="subtle">Os dados ficarão separados dos demais escritórios da plataforma.</p>
-    <div className="workspace-chosen-plan">
-      <strong>Plano escolhido: {signupPlans.find(p=>p.code===(session?.user.user_metadata?.selected_plan_code||''))?.name||'Essencial'}</strong>
-      <span>{trialSettings.trial_enabled?'Seu período gratuito inicia após criar o escritório.':'Acesso sujeito à liberação do administrador.'}</span>
-    </div>
-    <form onSubmit={makeWorkspace} className="stack gap-lg"><label>Nome do escritório<input required minLength={2} value={newWorkspace} onChange={e=>setNewWorkspace(e.target.value)} placeholder="Ex.: Contabilidade Exemplo"/></label>
-      {trialSettings.trial_enabled&&<p className="workspace-trial-info">Seu teste de {trialSettings.trial_days} dias começará após criar este escritório. Você poderá cadastrar até {trialSettings.trial_max_clients} clientes durante a avaliação.</p>}
-      {error&&<p className="form-error">{error}</p>}<button className="btn primary block" disabled={saving}>Criar espaço de trabalho</button></form>
-  </div></div><WhatsAppSupport/></>;
+  if(!demo&&!workspace)return <>
+    <ProspectWelcome
+      name={typeof session?.user.user_metadata?.full_name==='string'?session.user.user_metadata.full_name:'contador'}
+      plans={signupPlans} plansError={signupPlansError} trial={trialSettings}
+      initialOffice={newWorkspace} busy={saving} error={error}
+      onActivate={activateWorkspace}
+      onLogout={()=>{if(supabase)void supabase.auth.signOut();}}/>
+    <WhatsAppSupport/>
+  </>;
 
   if(!demo&&workspace&&!workspaceAllowed&&masterStatus!=='yes')return <>
     <div className="access-locked"><div className="access-locked-card">
