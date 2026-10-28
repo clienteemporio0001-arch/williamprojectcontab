@@ -23,7 +23,7 @@ const trialLabel=(o:{billing_status?:string|null;trial_ends_at?:string|null;acce
  o.billing_status==='trialing'
   ?remainingTrialDays(o.trial_ends_at||null)>0?'Em teste':'Teste expirado'
   :o.billing_status==='pending'?'Aguardando ativação'
-  :o.billing_status==='active'?'Assinatura liberada':'Situação do teste indisponível';
+  :o.billing_status==='active'?'Acesso completo liberado':'Situação do teste indisponível';
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'>('home');
@@ -90,6 +90,13 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  }
  async function changeBilling(action:'activate'|'extend_trial'|'pending'){
    if(!supabase||!edit)return;
+   const startingTrial=action==='extend_trial'&&edit.billing_status!=='trialing';
+   if(startingTrial){
+     const message=edit.billing_status==='active'
+       ?'Este escritório já possui acesso completo. Iniciar um teste grátis vai substituir esse acesso por '+extendDays+' dia(s) de avaliação, limitando o uso a '+trial.trial_max_clients+' clientes, 3 cobranças e sem disparos automáticos. Nenhum documento será excluído. Confirma?'
+       :'Iniciar '+extendDays+' dia(s) de teste grátis neste escritório? Durante a avaliação haverá limite de '+trial.trial_max_clients+' clientes e 3 cobranças, sem disparos automáticos.';
+     if(!window.confirm(message))return;
+   }
    if(action==='activate'&&!window.confirm('Liberar acesso deste escritório como assinatura ativa? Confirme o pagamento fora da plataforma.'))return;
    if(action==='pending'&&!window.confirm('Bloquear a assinatura deste escritório até regularização?'))return;
    if(action==='extend_trial'&&(!Number.isInteger(extendDays)||extendDays<1||extendDays>90)){
@@ -100,7 +107,8 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      p_org_id:edit.id,p_action:action,p_days:action==='extend_trial'?extendDays:null
    });
    if(e){setBusy(false);setError('Falha ao atualizar acesso: '+e.message);return;}
-   setEdit(null);await reload();setNotice('Acesso do escritório atualizado com registro de auditoria.');
+   setEdit(null);await reload();
+   setNotice(startingTrial?'Teste grátis iniciado e registrado no histórico.':'Acesso do escritório atualizado com registro de auditoria.');
  }
 
  const offices=data.organizations;
@@ -113,7 +121,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const pendingSignups=monitor.registrations.filter(r=>!r.org_id);
  const filteredActivities=monitor.activities.filter(a=>monitorOffice==='all'||a.org_id===monitorOffice);
  const filteredRegistrations=monitor.registrations.filter(r=>monitorOffice==='all'||r.org_id===monitorOffice);
- function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setExtendDays(7);setError('');setNotice('');}
+ function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setExtendDays(trial.trial_days||7);setError('');setNotice('');}
  function beginPrice(p:Plan){
   setEditPrice(p);setPriceInput(formatPlanPriceInput(Number(p.monthly_price_brl)));
   setPriceError('');setError('');setNotice('');
@@ -174,7 +182,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      <div className="master-trial-pulse">
        <button onClick={()=>setTab('plans')}><Clock3 size={17}/> Testes em andamento <strong>{runningTrials.length}</strong></button>
        <button onClick={()=>setTab('plans')}><LockKeyhole size={17}/> Testes vencidos <strong>{expiredTrials.length}</strong></button>
-       <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Cadastros sem escritório <strong>{pendingSignups.length}</strong></button>
+       <button onClick={()=>setTab('monitor')}><MailCheck size={17}/> Pré-teste · sem prazo iniciado <strong>{pendingSignups.length}</strong></button>
        <button onClick={()=>setTab('monitor')}><Activity size={17}/> Ações recentes <strong>{monitor.activities.length}</strong></button>
      </div>
      <div className="master-kpis">
@@ -193,7 +201,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO</th><th>CLIENTES</th><th>COBRANÇAS</th><th>STATUS</th><th></th></tr></thead><tbody>
      {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td><td>{o.plan_name}</td><td>{o.clients_active}/{o.client_limit}</td><td>{o.charges_total}</td><td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span>
  <small>{o.billing_status==='trialing'?(remainingTrialDays(o.trial_ends_at||null)>0?'Teste: '+remainingTrialDays(o.trial_ends_at||null)+' dia(s)':'Teste encerrado')
- :o.billing_status==='pending'?'Aguardando liberação':o.billing_status==='active'?'Assinatura liberada':'Configuração pendente'}</small></td>
+ :o.billing_status==='pending'?'Aguardando liberação':o.billing_status==='active'?'Acesso completo liberado':'Configuração pendente'}</small></td>
  <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
      {!visible.length&&<tr><td colSpan={6}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
@@ -220,7 +228,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
               <td>{timestamp(r.registered_at)}</td>
               <td>{r.verified?'Confirmado':'Pendente'}</td>
               <td><span className={'master-trial-status '+(r.billing_status==='trialing'?'trial':'')}>
-                {r.org_id?trialLabel(r):r.verified?'Cadastro sem escritório':'Aguardando confirmação'}
+                {r.org_id?trialLabel(r):r.verified?'Pré-teste · ainda não ativado':'Aguardando confirmação do e-mail'}
               </span></td>
               <td>{r.last_sign_in_at?timestamp(r.last_sign_in_at):'Ainda não entrou'}</td>
             </tr>)}
@@ -341,22 +349,41 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   </div>}
   {edit&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target)setEdit(null);}}><section className="master-modal" role="dialog" aria-modal="true" aria-label="Administrar escritório">
    <h2>Gerenciar escritório</h2><p>{edit.name} — {edit.owner_email||'Sem responsável'}</p>
-   <label>Plano<select value={plan} onChange={e=>setPlan(e.target.value)}>{data.plans.map(p=><option key={p.code} value={p.code}>{p.name} — até {p.client_limit} clientes</option>)}</select></label>
-   <label>Situação<select value={access} onChange={e=>setAccess(e.target.value as 'active'|'suspended')}><option value="active">Ativo</option><option value="suspended">Suspenso</option></select></label>
+   <div className="master-account-state">
+     <span className={'master-account-state-badge '+(edit.billing_status||'unknown')}>
+       {edit.billing_status==='trialing'?'CONTA EM TESTE GRÁTIS':
+        edit.billing_status==='active'?'ACESSO COMPLETO LIBERADO':
+        edit.billing_status==='pending'?'ACESSO PENDENTE':'STATUS NÃO CONFIGURADO'}
+     </span>
+     <p>O plano comercial e o período de teste são informações diferentes. O usuário pode testar o Essencial, Profissional ou Escritório Plus antes de contratar.</p>
+   </div>
+   <label>Plano comercial<select value={plan} onChange={e=>setPlan(e.target.value)}>
+     {data.plans.map(p=><option key={p.code} value={p.code}>{p.name} — até {p.client_limit} clientes</option>)}
+   </select></label>
+   <label>Situação de acesso<select value={access} onChange={e=>setAccess(e.target.value as 'active'|'suspended')}>
+     <option value="active">Ativo</option><option value="suspended">Suspenso</option>
+   </select></label>
    <div className="master-subscription-control">
-     <strong>Assinatura e teste</strong>
-     <p>{edit.billing_status==='active'?'Assinatura liberada':
-       edit.billing_status==='pending'?'Aguardando contratação':edit.billing_status!=='trialing'?'Configuração do teste pendente no Supabase':'Teste gratuito · '+(remainingTrialDays(edit.trial_ends_at||null)>0
-         ?remainingTrialDays(edit.trial_ends_at||null)+' dia(s) restante(s)':'encerrado')}</p>
-     {edit.trial_ends_at&&<small>Vencimento do teste: {new Date(edit.trial_ends_at).toLocaleDateString('pt-BR')}</small>}
-     {(edit.billing_status==='trialing'||edit.billing_status==='pending')&&<div className="master-trial-actions">
-       <label>Adicionar dias<input type="number" min={1} max={90} step={1}
-         value={extendDays} onChange={e=>setExtendDays(Number(e.target.value))}/></label>
-       <button type="button" disabled={busy} onClick={()=>void changeBilling('extend_trial')}>Prorrogar teste</button>
-       <button type="button" disabled={busy} onClick={()=>void changeBilling('activate')}>Liberar assinatura</button>
-     </div>}
-     {edit.billing_status==='active'&&<button type="button" className="master-mark-pending" disabled={busy}
-       onClick={()=>void changeBilling('pending')}>Colocar em acesso pendente</button>}
+     <strong>Teste gratuito e assinatura</strong>
+     <p>{edit.billing_status==='active'?'Acesso completo liberado (não confirma pagamento)':
+       edit.billing_status==='pending'?'Aguardando ativação':
+       edit.billing_status!=='trialing'?'Configuração do teste pendente no Supabase':
+       'Teste grátis · '+(remainingTrialDays(edit.trial_ends_at||null)>0
+         ?remainingTrialDays(edit.trial_ends_at||null)+' dia(s) restante(s)':'expirado')}</p>
+     {edit.trial_started_at&&<small>Início: {new Date(edit.trial_started_at).toLocaleDateString('pt-BR')}</small>}
+     {edit.trial_ends_at&&<small>Vencimento: {new Date(edit.trial_ends_at).toLocaleDateString('pt-BR')}</small>}
+     <div className="master-trial-actions">
+       <label>{edit.billing_status==='trialing'?'Adicionar dias ao teste':'Duração do novo teste (dias)'}
+         <input type="number" min={1} max={90} step={1} value={extendDays} onChange={e=>setExtendDays(Number(e.target.value))}/>
+       </label>
+       <button type="button" disabled={busy} onClick={()=>void changeBilling('extend_trial')}>
+         {edit.billing_status==='trialing'?'Prorrogar teste':'Iniciar teste grátis'}
+       </button>
+       {edit.billing_status!=='active'&&<button type="button" disabled={busy} onClick={()=>void changeBilling('activate')}>Liberar assinatura</button>}
+     </div>
+     {edit.billing_status==='active'&&<button type="button" className="master-mark-pending"
+       disabled={busy} onClick={()=>void changeBilling('pending')}>Colocar em acesso pendente</button>}
+     {edit.billing_status==='active'&&<p className="master-trial-hint">Esta conta possui acesso completo, possivelmente por ter sido criada antes do sistema de testes. Se ela não for pagante, use <strong>Iniciar teste grátis</strong>. Não altere assinantes pagos.</p>}
      {error&&<p className="master-price-error" role="alert">{error}</p>}
    </div>
    <p className="master-hint">A suspensão impede acesso aos dados operacionais e futuros envios. Não exclui documentos.</p>
