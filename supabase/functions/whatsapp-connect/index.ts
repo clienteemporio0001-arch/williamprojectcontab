@@ -83,7 +83,7 @@ Deno.serve(async(req:Request)=>{
   try{
     // O token é emitido pela Meta e nunca passa para o browser ou banco em texto aberto.
     const url='oauth/access_token?'+new URLSearchParams({
-      client_id:appId,client_secret:appSecret,code
+      client_id:appId,client_secret:appSecret,code,redirect_uri:''
     });
     const response=await fetch('https://graph.facebook.com/'+version+'/'+url);
     const exchanged=await response.json().catch(()=>({}));
