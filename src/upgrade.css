@@ -1,0 +1,44 @@
+.upgrade-backdrop{position:fixed;inset:0;z-index:120;display:grid;place-items:center;padding:20px;background:#020810dc;backdrop-filter:blur(7px)}
+.upgrade-dialog{width:min(1080px,100%);max-height:min(92vh,950px);overflow:auto;background:#142338;color:#effaf7;border:1px solid #3a6471;border-radius:17px;box-shadow:0 35px 105px #000b;font-family:'DM Sans',sans-serif}
+.upgrade-dialog-head{display:flex;align-items:center;gap:14px;padding:24px 28px 20px;border-bottom:1px solid #2c4559}
+.upgrade-dialog-icon{width:41px;height:41px;border:1px solid #4a9e7b;background:#1b4d40;border-radius:11px;display:grid;place-items:center;color:#8bf5d0}
+.upgrade-dialog-head>div:nth-child(2){flex:1}
+.upgrade-dialog-head span{font-size:10px;font-weight:900;color:#75eac1;letter-spacing:1.5px}
+.upgrade-dialog-head h2{font:800 clamp(19px,2.7vw,26px)/1.3 Manrope,sans-serif;letter-spacing:-.8px;margin:6px 0 0}
+.upgrade-close{display:grid;place-items:center;width:35px;height:35px;background:#1b3147;border:1px solid #35536a;border-radius:9px;color:#cce1e6}
+.upgrade-lead{padding:16px 28px 0;margin:0;color:#a5c4cb;font-size:12px;line-height:1.8}
+.upgrade-plan-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:23px 28px}
+.upgrade-plan{border:1px solid #37546a;border-radius:12px;background:#102035;padding:21px;min-width:0;display:flex;flex-direction:column;gap:15px;position:relative}
+.upgrade-plan.selected{border-color:#6ff2c2;background:#193c39;box-shadow:0 0 0 1px #6fe6bc55}
+.upgrade-plan.featured{border-color:#4d8e75}
+.upgrade-popular{position:absolute;top:-11px;left:17px;background:#4fe2b2;color:#073429;padding:6px 9px;border-radius:6px;font-size:9px;letter-spacing:.35px;font-weight:900}
+.upgrade-plan-head{display:flex;justify-content:space-between;align-items:flex-start;gap:7px;min-height:48px}
+.upgrade-plan-head>div{display:grid;gap:9px}.upgrade-plan-head svg{color:#7df0c5}
+.upgrade-plan-head h3{margin:0;font-size:17px;font-family:Manrope,sans-serif}
+.upgrade-current{border-radius:6px;background:#244d40;color:#a0f7d4;padding:5px;font-size:9px;white-space:nowrap}
+.upgrade-price{font:800 clamp(21px,2.1vw,28px) Manrope,sans-serif;color:#f4fffb;letter-spacing:-1px}
+.upgrade-price small{font:500 11px 'DM Sans',sans-serif;color:#93b2bd;letter-spacing:0}
+.upgrade-benefits{border-top:1px solid #325169;padding-top:18px;display:grid;gap:12px;min-height:148px}
+.upgrade-benefits span{display:flex;align-items:flex-start;gap:7px;color:#a9c6cc;font-size:10px;line-height:1.5}
+.upgrade-benefits svg{color:#67e6bf;flex-shrink:0}
+.upgrade-benefits strong{color:#cff3e7}
+.upgrade-plan-btn,.upgrade-selected-btn{margin-top:auto;min-height:41px;background:#1d4f42;border:1px solid #398f6b;border-radius:9px;color:#baf4de;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;gap:8px}
+.upgrade-selected-btn{background:#52dfb3;color:#07392d;border-color:#67eec3}
+.upgrade-summary{padding:16px 28px;display:flex;align-items:center;gap:20px;justify-content:space-between;border-top:1px solid #2b4657;background:#102236}
+.upgrade-summary-info{display:flex;align-items:center;gap:11px;min-width:0}
+.upgrade-summary-info svg{color:#64e9bd;flex-shrink:0}.upgrade-summary-info span{display:grid;gap:6px}
+.upgrade-summary-info strong{font-size:12px}.upgrade-summary-info small{font-size:10px;color:#9abac3;line-height:1.5}
+.upgrade-primary,.upgrade-contact-link{white-space:nowrap;min-height:43px;display:inline-flex;align-items:center;justify-content:center;gap:9px;background:#52ddb2;color:#06382c;border:0;border-radius:8px;font-size:12px;font-weight:900;padding:10px 18px}
+.upgrade-primary:disabled{opacity:.46;cursor:not-allowed}
+.upgrade-error{margin:0 28px 15px;background:#4f2e35;border:1px solid #995a61;color:#ffe0da;padding:12px;border-radius:8px;font-size:11px;line-height:1.6}
+.upgrade-disclaimer{display:flex;align-items:center;gap:7px;margin:0;padding:12px 28px 19px;color:#84a5b5;font-size:10px;line-height:1.5}
+.upgrade-confirmation{display:grid;justify-items:center;text-align:center;gap:14px;padding:35px 30px 38px}
+.upgrade-confirmation>svg{color:#60eab9}.upgrade-confirmation h3{font:800 23px Manrope,sans-serif;margin:0}
+.upgrade-confirmation p{font-size:12px;color:#aac8ce;line-height:1.8;max-width:660px;margin:0}
+.upgrade-confirmation p strong{color:#a6ffdb}
+.upgrade-contact-link{margin-top:8px;text-decoration:none}
+.upgrade-secondary{border:0;background:transparent;color:#9fdcc8;font-size:12px;padding:9px;font-weight:800}
+@media(max-width:900px){.upgrade-plan-grid{gap:9px;padding:22px 18px}.upgrade-plan{padding:14px}.upgrade-benefits{min-height:168px}.upgrade-plan-head{display:grid;gap:8px}.upgrade-dialog-head,.upgrade-summary{padding-inline:18px}}
+@media(max-width:680px){.upgrade-backdrop{padding:8px}.upgrade-dialog{max-height:96vh}.upgrade-dialog-head{padding:16px 14px}.upgrade-dialog-icon{width:33px;height:33px;flex-shrink:0}.upgrade-dialog-head h2{font-size:19px}
+.upgrade-lead{padding:13px 15px 0}.upgrade-plan-grid{grid-template-columns:1fr;gap:12px;padding:16px}.upgrade-plan{gap:12px}.upgrade-plan-head{display:flex;min-height:0}.upgrade-benefits{min-height:0;grid-template-columns:1fr 1fr;gap:10px}.upgrade-summary{display:grid;padding:17px}.upgrade-primary{width:100%}.upgrade-disclaimer{padding:0 17px 18px}.upgrade-error{margin:0 16px 14px}}
+@media(prefers-reduced-motion:reduce){.upgrade-backdrop{backdrop-filter:none}}
