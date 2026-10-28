@@ -10,6 +10,7 @@ import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
 import MarketingLanding from './MarketingLanding';
 import ProspectWelcome from './ProspectWelcome';
+import UpgradePlansModal,{type UpgradePlan} from './UpgradePlansModal';
 import WhatsAppSupport from './WhatsAppSupport';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
 import {normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
@@ -60,6 +61,7 @@ export default function App() {
   const [page,setPage] = useState<Page>('overview');
   const [menuOpen,setMenuOpen] = useState(false);
   const [trialGuideOpen,setTrialGuideOpen] = useState(true);
+  const [upgradeOpen,setUpgradeOpen] = useState(false);
   const [search,setSearch] = useState('');
   const [filter,setFilter] = useState('all');
   const [clients,setClients] = useState<Client[]>(() => readDemo('contabflow_clients_v1',demoClients));
@@ -109,6 +111,32 @@ export default function App() {
       });
     return()=>{live=false;};
   },[]);
+  // Oferta discreta: no máximo uma abertura automática a cada 72 horas,
+  // apenas dentro da visão geral durante um teste vigente.
+  useEffect(()=>{
+    if(!workspace||workspace.billing_status!=='trialing'||page!=='overview'||!session||demo||upgradeOpen)return;
+    let shown=0;
+    try{shown=Number(localStorage.getItem('contabflow_plan_offer_'+workspace.id)||0);}catch{ /* armazenamento indisponível */ }
+    if(Date.now()-shown<72*60*60*1000)return;
+    const timer=window.setTimeout(()=>{
+      try{localStorage.setItem('contabflow_plan_offer_'+workspace.id,String(Date.now()));}catch{ /* privado */ }
+      setUpgradeOpen(true);
+    },42000);
+    return()=>window.clearTimeout(timer);
+  },[workspace?.id,workspace?.billing_status,page,session?.user.id,demo,upgradeOpen]);
+  function openUpgrade(){
+    if(workspace){
+      try{localStorage.setItem('contabflow_plan_offer_'+workspace.id,String(Date.now()));}catch{ /* privado */ }
+    }
+    setUpgradeOpen(true);
+  }
+  async function requestUpgrade(plan:UpgradePlan):Promise<string>{
+    if(!supabase||!session||!workspace)throw new Error('Faça login e entre em seu escritório para contratar.');
+    const {data,error:e}=await supabase.rpc('request_saas_upgrade',{p_org_id:workspace.id,p_plan_code:plan.code});
+    if(e)throw new Error(e.message);
+    if(typeof data!=='string')throw new Error('O pedido não foi confirmado no banco. Tente novamente.');
+    return data;
+  }
   useEffect(()=>{
     if(!supabase)return;
     let live=true;
@@ -452,10 +480,12 @@ export default function App() {
       <h1>{workspace.access_status==='suspended'?'Escritório temporariamente suspenso':
         workspace.billing_status==='pending'?'Aguardando liberação do seu escritório':'Seu teste grátis terminou'}</h1>
       <p>Os dados do seu escritório continuam armazenados. Para retomar o acesso e as cobranças, entre em contato e solicite a ativação do plano.</p>
-      <a href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Quero%20contratar%20o%20ContabFlow."
-        target="_blank" rel="noopener noreferrer" className="btn primary">Conversar pelo WhatsApp</a>
+      <button type="button" onClick={openUpgrade} className="btn primary">Conhecer planos e contratar</button>
       <button className="btn soft" onClick={()=>{if(supabase)void supabase.auth.signOut();}}>Sair</button>
-    </div></div><WhatsAppSupport/>
+    </div></div>
+    {upgradeOpen&&<UpgradePlansModal plans={signupPlans} currentPlan={session?.user.user_metadata?.selected_plan_code||''}
+      officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)} onRequest={requestUpgrade}/>}
+    <WhatsAppSupport/>
   </>;
   const title={overview:'Visão geral',clients:'Clientes',obligations:'Cobranças',automations:'Automações',settings:'Configurações'}[page];
   return <div className="app-shell">
@@ -479,8 +509,7 @@ export default function App() {
         {isTrial&&trialDaysLeft>0&&<div className="trial-banner" role="status">
           <Clock3 size={20}/><span><strong>Sua conta está no período de teste gratuito.</strong>
           <span className="trial-subline">Faltam {trialDaysLeft} {trialDaysLeft===1?'dia':'dias'} para o término. Você pode cadastrar até {trialClientLimit} clientes e criar até 3 cobranças, com PDFs personalizados. Os disparos automáticos via WhatsApp não estão disponíveis neste período.</span></span>
-          <a href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Quero%20contratar%20o%20ContabFlow."
-            target="_blank" rel="noopener noreferrer">Desbloquear plano</a>
+          <button type="button" className="trial-upgrade-button" onClick={openUpgrade}>Desbloquear plano</button>
         </div>}
         {demo&&<div className="demo-banner"><div><CircleHelp size={18}/><span><strong>Modo demonstração.</strong> Os exemplos são fictícios; alterações ficam apenas neste navegador. Para usar em produção, conecte o Supabase.</span></div><span className="demo-tag">DEMO</span></div>}
         {(toast||error)&&<div className={'notice '+(error?'danger':'ok')}><span>{error||toast}</span><button onClick={()=>{setToast('');setError('');}} aria-label="Dispensar"><X size={16}/></button></div>}
@@ -526,7 +555,7 @@ export default function App() {
               <div className="trial-step">
                 <div className="trial-step-heading"><span className="trial-step-icon"><Sparkles size={16}/></span><strong>3. Explore o painel</strong></div>
                 <p>Conheça os vencimentos e os recursos disponíveis</p>
-                <a target="_blank" rel="noopener noreferrer" href="https://wa.me/5568992097927?text=Ol%C3%A1%21%20Tenho%20interesse%20no%20ContabFlow.">Conversar sobre planos <ArrowUpRight size={13}/></a>
+                <button type="button" onClick={openUpgrade}>Ver planos <ArrowUpRight size={13}/></button>
               </div>
             </div>
           </div>}
@@ -594,6 +623,10 @@ export default function App() {
       </div>
     </main>
 
+    {upgradeOpen&&workspace&&<UpgradePlansModal plans={signupPlans}
+      currentPlan={session?.user.user_metadata?.selected_plan_code||''}
+      officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)}
+      onRequest={requestUpgrade}/>}
     {modal&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)closeModal();}}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><p className="eyebrow">CONTABFLOW</p><h2 id="modal-title">{modal==='client'?(clientDraft.id?'Editar cliente':'Novo cliente'):(obligationDraft.id?'Editar cobrança':'Nova cobrança')}</h2></div><button className="icon-button" aria-label="Fechar" onClick={closeModal}><X size={21}/></button></div>
       {modal==='client'?<form onSubmit={saveClient} className="modal-body stack gap-lg"><div className="form-row"><label>Nome completo *<input autoFocus required value={clientDraft.name} onChange={e=>setClientDraft({...clientDraft,name:e.target.value})} placeholder="Ex.: Maria Silva"/></label><label>Empresa<input value={clientDraft.company} onChange={e=>setClientDraft({...clientDraft,company:e.target.value})} placeholder="Razão social ou fantasia"/></label></div>
