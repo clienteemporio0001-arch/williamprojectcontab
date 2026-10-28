@@ -69,12 +69,8 @@ Deno.serve(async(req:Request)=>{
     return respond(req,{ok:true,disconnected:true});
   }
   if(action!=='connect')return respond(req,{error:'Ação inválida'},400);
-  const code=String(body.code||''),directToken=String(body.access_token||'');
-  const wabaId=String(body.waba_id||''),phoneId=String(body.phone_number_id||'');
-  if((!directToken&&!/^[a-zA-Z0-9_-]{10,1500}$/.test(code)) ||
-      (directToken!==''&&!/^[a-zA-Z0-9._|-]{30,4096}$/.test(directToken)) ||
-      (wabaId!==''&&!/^\d{5,30}$/.test(wabaId)) ||
-      (phoneId!==''&&!/^\d{5,30}$/.test(phoneId)) || (phoneId!==''&&!wabaId)){
+  const code=String(body.code||''),wabaId=String(body.waba_id||''),phoneId=String(body.phone_number_id||'');
+  if(!/^[a-zA-Z0-9_-]{10,1500}$/.test(code) || (wabaId!==''&&!/^\d{5,30}$/.test(wabaId)) || (phoneId!==''&&!/^\d{5,30}$/.test(phoneId)) || (phoneId!==''&&!wabaId)){
     return respond(req,{error:'Conclusão incompleta na Meta. Confira o número e tente conectar novamente.'},400);
   }
   const appId=Deno.env.get('META_APP_ID')||'',appSecret=Deno.env.get('META_APP_SECRET')||'';
@@ -85,39 +81,43 @@ Deno.serve(async(req:Request)=>{
     return respond(req,{error:'Credenciais pendentes no Supabase: '+missing.join(', ')+'. Entre em Edge Functions > Secrets para corrigir.'},503);
   }
   try{
-    // A credencial vem do FB.login e é enviada via HTTPS; nunca armazenar sem validar o app e o escopo na Meta.
-    let accessToken=directToken;
-    if(!accessToken){
-      const url='oauth/access_token?'+new URLSearchParams({client_id:appId,client_secret:appSecret,code});
-      const response=await fetch('https://graph.facebook.com/'+version+'/'+url);
-      const exchanged=await response.json().catch(()=>({}));
-      if(!response.ok)throw Error(exchanged?.error?.message||'Falha na troca do código Meta');
-      accessToken=String(exchanged?.access_token||'');
-    }
+    // O token é emitido pela Meta e nunca passa para o browser ou banco em texto aberto.
+    const url='oauth/access_token?'+new URLSearchParams({
+      client_id:appId,client_secret:appSecret,code,redirect_uri:''
+    });
+    const response=await fetch('https://graph.facebook.com/'+version+'/'+url);
+    const exchanged=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(exchanged?.error?.message||'Falha na troca do código Meta');
+    const accessToken=String(exchanged?.access_token||'');
     if(accessToken.length<30)throw Error('A Meta não retornou um token de integração válido.');
-    const audit=await graph('debug_token?'+new URLSearchParams({input_token:accessToken}),appId+'|'+appSecret,version);
-    const grant=audit?.data as {is_valid?:boolean;app_id?:string|number;granular_scopes?:Array<{scope?:string;target_ids?:string[]}>}|undefined;
-    if(!grant?.is_valid||String(grant.app_id)!==appId){
-      throw Error('A Meta retornou um token inválido ou que não pertence ao aplicativo ContabFlow.');
-    }
-    const managementIds=new Set<string>();
-    const messagingIds=new Set<string>();
-    for(const entry of grant.granular_scopes||[]){
-      if(!['whatsapp_business_management','whatsapp_business_messaging'].includes(String(entry.scope)))continue;
-      const bucket=entry.scope==='whatsapp_business_management'?managementIds:messagingIds;
-      for(const candidate of entry.target_ids||[]){
-        if(/^\d{5,30}$/.test(String(candidate)))bucket.add(String(candidate));
-      }
-    }
+    // O Login Embedded Signup envia o código e o evento FINISH separadamente.
+    // Se o evento FINISH não chegar, consultar somente os WABAs explicitamente
+    // autorizados no token da própria Meta. Nunca inferir contas de terceiros.
     let selectedWabaId=wabaId;
     if(!selectedWabaId){
-      if(managementIds.size!==1)throw Error(managementIds.size===0?
-        'A Meta concedeu somente login do Facebook, sem acesso a uma conta WhatsApp. Selecione o WhatsApp Business em Editar configurações.':
-        'Há mais de uma conta WhatsApp autorizada. Escolha um único número na Meta.');
-      selectedWabaId=[...managementIds][0];
-    }
-    if(!managementIds.has(selectedWabaId)||!messagingIds.has(selectedWabaId)){
-      throw Error('A Meta não concedeu as duas permissões de WhatsApp para a conta selecionada. Revise a configuração Embedded Signup.');
+      const audit=await graph('debug_token?'+new URLSearchParams({
+        input_token:accessToken
+      }),appId+'|'+appSecret,version);
+      const grant=audit?.data as {
+        is_valid?:boolean;app_id?:string|number;
+        granular_scopes?:Array<{scope?:string;target_ids?:string[]}>;
+      }|undefined;
+      if(!grant?.is_valid||String(grant.app_id)!==appId){
+        throw Error('A Meta retornou uma autorização que não pertence ao aplicativo ContabFlow.');
+      }
+      const ids=new Set<string>();
+      for(const entry of grant.granular_scopes||[]){
+        if(!['whatsapp_business_management','whatsapp_business_messaging'].includes(String(entry.scope)))continue;
+        for(const candidate of entry.target_ids||[]){
+          if(/^\d{5,30}$/.test(String(candidate)))ids.add(String(candidate));
+        }
+      }
+      if(ids.size!==1){
+        throw Error(ids.size===0?
+          'A Meta autorizou somente o Facebook, sem conceder acesso a uma conta WhatsApp. No login, use Editar configurações e conclua a seleção do WhatsApp Business.':
+          'A Meta autorizou mais de uma conta WhatsApp. Selecione um único número em Editar configurações antes de conectar.');
+      }
+      selectedWabaId=[...ids][0];
     }
     const phoneList=await graph(selectedWabaId+'/phone_numbers?fields=id,display_phone_number,verified_name&limit=100',accessToken,version);
     const phones=(phoneList?.data||[]) as Array<{id:string;display_phone_number?:string;verified_name?:string}>;
