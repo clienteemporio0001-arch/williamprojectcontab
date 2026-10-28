@@ -79,13 +79,13 @@ function pdfBase64(bytes:Uint8Array){
   }
   return btoa(binary);
 }
-async function sendEmailPdf(recipient:string,subject:string,html:string,bytes:Uint8Array,filename:string){
+async function sendEmailPdf(recipient:string,subject:string,html:string,bytes:Uint8Array,filename:string,idempotencyKey:string){
   const key=Deno.env.get('RESEND_API_KEY');
   const sender=Deno.env.get('RESEND_FROM_EMAIL');
   if(!key||!sender)throw new Error('Resend não configurado');
   const response=await fetch('https://api.resend.com/emails',{
     method:'POST',headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json',
-      'Idempotency-Key':Deno.env.get('SUPABASE_URL')?('contabflow-'+crypto.randomUUID()):crypto.randomUUID()},
+      'Idempotency-Key':'contabflow-'+idempotencyKey},
     body:JSON.stringify({
       from:sender,to:[recipient],subject,html,
       attachments:[{filename,content:pdfBase64(bytes),content_type:'application/pdf'}]
@@ -243,7 +243,7 @@ Deno.serve(async(req:Request)=>{
               '<p>O documento contém os dados para pagamento. Se já realizou o pagamento, desconsidere esta mensagem.</p>'+
               '<p>Atenciosamente,<br>'+htmlSafe(org.name)+'</p>'+
               '<hr/><small>Este aviso não é recibo nem confirmação de quitação. Em caso de dúvidas ou para deixar de receber lembretes, entre em contato com o escritório.</small></div>',
-              pdf,filename);
+              pdf,filename,log.id);
           }else{
             providerId=await sendDocument(client.phone,[
               client.name.split(' ')[0],item.title,formatDate(item.due_date),formatBRL(item.amount)
