@@ -22,7 +22,6 @@ const appId=import.meta.env.VITE_META_APP_ID||'';
 const configId=import.meta.env.VITE_META_CONFIG_ID||'';
 const META_REDIRECT_URI='https://clienteemporio0001-arch.github.io/williamprojectcontab/';
 const MAX_SIGNUP_MS=180_000;
-const MISSING_WHATSAPP_SESSION_MS=2_000;
 const ALLOWED_META_EVENTS=new Set([
   'FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
   'FINISH_OBO_MIGRATION','FINISH_GRANT_ONLY_API_ACCESS'
