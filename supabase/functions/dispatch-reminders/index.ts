@@ -39,9 +39,7 @@ function formatDate(date:string){
 function formatBRL(n:number|null){
   return n==null?'não informado':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 }
-async function sendDocument(phone:string,values:string[],bytes:Uint8Array,filename:string) {
-  const token=Deno.env.get('WHATSAPP_TOKEN');
-  const phoneId=Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
+async function sendDocument(phone:string,values:string[],bytes:Uint8Array,filename:string,token:string,phoneId:string) {
   const template=Deno.env.get('WHATSAPP_TEMPLATE_NAME')||'cobranca_honorarios_pdf';
   const lang=Deno.env.get('WHATSAPP_TEMPLATE_LANG')||'pt_BR';
   const version=Deno.env.get('WHATSAPP_GRAPH_VERSION')||'v23.0';
@@ -117,8 +115,6 @@ Deno.serve(async(req:Request)=>{
   if(testNow&&(!/^[0-9a-f-]{36}$/i.test(testOrg)||!/^55[0-9]{10,11}$/.test(testRecipient))){
     return fail('Teste imediato exige WHATSAPP_TEST_ORG_ID e WHATSAPP_TEST_RECIPIENT válidos',400);
   }
-  const token=Deno.env.get('WHATSAPP_TOKEN');
-  const phoneId=Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
   if(!dryRun&&Deno.env.get('DISPATCH_LIVE_ENABLED')!=='true')
     return fail('Envios reais desativados. Configure DISPATCH_LIVE_ENABLED=true apenas depois de testar.',503);
 
@@ -142,6 +138,28 @@ Deno.serve(async(req:Request)=>{
     // Agendamento: uma vez por dia, entre 9h e 10h da manhã de cada escritório.
     if(local.hour!==9&&!dryRun&&!testNow)continue;
     stats.organizations++;
+
+    // O remetente é EXCLUSIVO deste escritório; nenhum token/número global
+    // pode ser reutilizado para outro escritório.
+    let senderToken:string|null=null;
+    let senderPhoneId:string|null=null;
+    if(org.whatsapp_reminders_enabled && !dryRun){
+      const {data:connection}=await db.from('whatsapp_integrations')
+        .select('phone_number_id,connection_status')
+        .eq('org_id',org.id).maybeSingle();
+      if(connection?.connection_status==='connected'){
+        const cipherKey=Deno.env.get('WHATSAPP_CREDENTIAL_KEY')||'';
+        if(cipherKey.length>=32){
+          const {data:unsealed,error:unsealError}=await db.rpc('whatsapp_integration_token',{
+            p_org_id:org.id,p_crypto_key:cipherKey
+          });
+          if(!unsealError&&typeof unsealed==='string'&&unsealed.length>20){
+            senderToken=unsealed;
+            senderPhoneId=connection.phone_number_id;
+          }
+        }
+      }
+    }
 
     // Gera a competência do mês corrente em séries recorrentes (idempotente).
     const {data:cycles,error:cyclesError}=await db.from('obligations')
@@ -217,7 +235,7 @@ Deno.serve(async(req:Request)=>{
         }
 
         if((isEmail&&(!Deno.env.get('RESEND_API_KEY')||!Deno.env.get('RESEND_FROM_EMAIL'))) ||
-          (!isEmail&&(!token||!phoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME')))){
+          (!isEmail&&(!senderToken||!senderPhoneId||!Deno.env.get('WHATSAPP_TEMPLATE_NAME')))){
           stats.configMissing++;continue;
         }
         // Se o contador marcou a cobrança como paga, não envie novos lembretes.
@@ -268,7 +286,7 @@ Deno.serve(async(req:Request)=>{
           }else{
             providerId=await sendDocument(client.phone,[
               client.name.split(' ')[0],item.title,formatDate(item.due_date),formatBRL(item.amount)
-            ],pdf,filename);
+            ],pdf,filename,senderToken!,senderPhoneId!);
           }
           const {error:updateError}=await db.from('reminder_logs').update({
             status:'sent',provider_message_id:providerId,sent_at:new Date().toISOString()
