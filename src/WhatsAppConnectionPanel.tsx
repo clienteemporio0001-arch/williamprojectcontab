@@ -21,6 +21,7 @@ declare global{interface Window{FB?:MetaSdk;}}
 const appId=import.meta.env.VITE_META_APP_ID||'';
 const configId=import.meta.env.VITE_META_CONFIG_ID||'';
 const MAX_SIGNUP_MS=180_000;
+const MISSING_WHATSAPP_SESSION_MS=22_000;
 const ALLOWED_META_EVENTS=new Set([
   'FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
   'FINISH_OBO_MIGRATION','FINISH_GRANT_ONLY_API_ACCESS'
@@ -54,23 +55,28 @@ export default function WhatsAppConnectionPanel({
   const info=useRef<{code?:string;waba?:string;phone?:string}>({});
   const submitting=useRef(false);
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const sessionTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const flowId=useRef(0);
   const configured=Boolean(appId&&configId&&supabase);
 
   const clearTimer=useCallback(()=>{
     if(timer.current!==null){clearTimeout(timer.current);timer.current=null;}
   },[]);
+  const clearSessionTimer=useCallback(()=>{
+    if(sessionTimer.current!==null){clearTimeout(sessionTimer.current);sessionTimer.current=null;}
+  },[]);
   const stopFlow=useCallback((message='')=>{
     flowId.current+=1;
     clearTimer();
+    clearSessionTimer();
     info.current={};
     submitting.current=false;
     setBusy(false);
     setProgress('');
     if(message)setError(message);
-  },[clearTimer]);
+  },[clearSessionTimer,clearTimer]);
 
-  useEffect(()=>()=>{flowId.current+=1;clearTimer();},[clearTimer]);
+  useEffect(()=>()=>{flowId.current+=1;clearTimer();clearSessionTimer();},[clearSessionTimer,clearTimer]);
 
   const refresh=useCallback(async()=>{
     if(!supabase||!orgId)return;
@@ -113,7 +119,7 @@ export default function WhatsAppConnectionPanel({
 
   const attemptComplete=useCallback(async()=>{
     const {code,waba,phone}=info.current;
-    if(!code||!waba||!phone||!orgId||!supabase||submitting.current)return;
+    if(!code||!waba||!orgId||!supabase||submitting.current)return;
     submitting.current=true;
     const activeFlow=flowId.current;
     setProgress('Autorização recebida. Registrando o número com segurança...');
@@ -160,10 +166,11 @@ export default function WhatsAppConnectionPanel({
       if(!ALLOWED_META_EVENTS.has(String(data.event)))return;
       const waba=String(data.data?.waba_id||'');
       const phone=String(data.data?.phone_number_id||'');
-      if(!waba||!phone){
-        stopFlow('O cadastro da Meta terminou, mas não informou um número WhatsApp. Conclua a seleção e a verificação do telefone no fluxo da Meta.');
+      if(!waba){
+        stopFlow('A Meta não informou a conta WhatsApp (WABA). Abra novamente e escolha Editar configurações para selecionar a empresa e o número.');
         return;
       }
+      clearSessionTimer();
       info.current={...info.current,waba,phone};
       setProgress(info.current.code?
         'Número e autorização recebidos. Concluindo conexão...':
@@ -172,7 +179,7 @@ export default function WhatsAppConnectionPanel({
     };
     window.addEventListener('message',onMessage);
     return()=>window.removeEventListener('message',onMessage);
-  },[attemptComplete,busy,stopFlow]);
+  },[attemptComplete,busy,clearSessionTimer,stopFlow]);
 
   function connect(){
     if(!window.FB||!configId||busy||!orgId)return;
@@ -184,6 +191,7 @@ export default function WhatsAppConnectionPanel({
     setProgress('Conclua a seleção do número na janela da Meta. Você pode cancelar aqui se a janela fechar.');
     setBusy(true);
     clearTimer();
+    clearSessionTimer();
     timer.current=setTimeout(()=>{
       if(activeFlow!==flowId.current)return;
       stopFlow('Não recebemos todas as confirmações da Meta. A tentativa foi encerrada para evitar travamento. Confira se selecionou e verificou um número.');
@@ -199,9 +207,16 @@ export default function WhatsAppConnectionPanel({
           return;
         }
         info.current={...info.current,code};
-        setProgress(info.current.phone?
-          'Autorização e número recebidos. Concluindo conexão...':
-          'Login autorizado. Aguardando o número WhatsApp selecionado na Meta...');
+        setProgress(info.current.waba?
+          'Autorização e conta WhatsApp recebidas. Concluindo conexão...':
+          'Login autorizado, mas a Meta ainda não enviou a conta WhatsApp. Se a janela fechou, será necessário selecionar o número em Editar configurações.');
+        if(!info.current.waba){
+          clearSessionTimer();
+          sessionTimer.current=setTimeout(()=>{
+            if(activeFlow!==flowId.current||info.current.waba)return;
+            stopFlow('A Meta autorizou o Facebook, mas não retornou a conta WhatsApp (WABA). Na próxima tentativa, clique em Editar configurações, selecione o portfólio e conclua o cadastro do número. Apenas Continuar como... pode reutilizar uma autorização incompleta.');
+          },MISSING_WHATSAPP_SESSION_MS);
+        }
         void attemptComplete();
       },{
         config_id:configId,
