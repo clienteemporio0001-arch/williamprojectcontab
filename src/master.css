@@ -159,3 +159,16 @@
  .master-trial-dialog .master-trial-content{padding:14px}.master-trial-dialog .master-trial-table{margin:0 14px 16px}
  .master-trial-dialog .master-trial-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Teste é uma condição da conta, não um quarto plano comercial. */
+.master-account-state{border:1px solid #344f65;background:#12273a;border-radius:9px;padding:13px;display:grid;gap:8px;margin:15px 0}
+.master-account-state p{color:#9bbaca;font-size:11px;line-height:1.7;margin:0}
+.master-account-state-badge{display:inline-flex;width:fit-content;align-items:center;line-height:1;padding:8px 10px;
+ font-size:10px;font-weight:900;letter-spacing:.65px;border:1px solid #3e6378;border-radius:6px;color:#adcde1;background:#1e334b}
+.master-account-state-badge.trialing{border-color:#398771;color:#94f8d3;background:#174338}
+.master-account-state-badge.active{border-color:#536889;color:#c3d8ef;background:#23324b}
+.master-account-state-badge.pending{border-color:#957a47;color:#f2d49d;background:#3d3225}
+.master-subscription-control .master-trial-hint{font-size:11px;line-height:1.7;color:#b2cbd4;
+ background:#193347;border:1px solid #38566c;padding:11px;border-radius:8px;margin-top:9px}
+.master-trial-actions>button{min-height:39px}.master-trial-actions>button:only-of-type{grid-column:1/-1}
+.master-subscription-control>small{display:block;margin-top:7px;font-size:11px;color:#8dbbc8}
