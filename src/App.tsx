@@ -276,87 +276,71 @@ export default function App() {
     }
     notify('Preferências salvas.');
   }
-  async function submitAuth(e:FormEvent) {
+  async function submitEmailLead(lead:{name:string;email:string;phone:string}):Promise<string>{
+    if(!supabase)throw Error('O cadastro está temporariamente indisponível.');
+    const phone=normalizeBrazilPhone(lead.phone);
+    if(lead.name.trim().length<3)throw Error('Informe seu nome completo.');
+    if(!phone)throw Error('Informe um WhatsApp com DDD válido.');
+    const email=lead.email.trim().toLowerCase();
+    const {error:e}=await supabase.auth.signInWithOtp({
+      email,options:{
+        shouldCreateUser:true,
+        data:{full_name:lead.name.trim(),office_phone:phone},
+        emailRedirectTo:new URL(import.meta.env.BASE_URL,window.location.origin).toString()
+      }
+    });
+    if(e)throw Error(signupErrorMessage(e.message));
+    return 'Link de acesso enviado para '+email+'. Confira a caixa de entrada ou Spam.';
+  }
+  async function submitAuth(e:FormEvent){
     e.preventDefault();
     if(!supabase)return;
-    setAuthNotice('');setError('');
-    const email=authEmail.trim().toLowerCase();
-    let payload:Record<string,string>|undefined;
-    if(authMode==='signup'){
-      if(!signupPlans.some(p=>p.code===signupPlan)){setError('Selecione um plano antes de criar a conta.');return;}
-      if(signupName.trim().length<3){setError('Informe seu nome completo.');return;}
-      if(signupOffice.trim().length<2){setError('Informe o nome do escritório contábil.');return;}
-      const phone=normalizeBrazilPhone(signupPhone);
-      if(!phone){setError('Informe um WhatsApp profissional com DDD válido.');return;}
-      if(signupTaxId.trim()&&!validCNPJ(signupTaxId)){setError('O CNPJ informado não é válido. Confira os 14 dígitos ou deixe em branco se atua como autônomo.');return;}
-      if(authPassword.length<8){setError('Crie uma senha com pelo menos 8 caracteres.');return;}
-      if(authPassword!==authPasswordConfirm){setError('A confirmação de senha não corresponde à senha digitada.');return;}
-      payload={
-        full_name:signupName.trim(),
-        office_name:signupOffice.trim(),
-        selected_plan_code:signupPlan,
-        company_tax_id:signupTaxId.replace(/\D/g,''),
-        office_phone:phone,
-        crc_registration:signupCRC.trim().slice(0,35)
-      };
-    }
-    setSaving(true);
+    setError('');setAuthNotice('');setSaving(true);
     try{
-      const result=authMode==='login'
-        ?await supabase.auth.signInWithPassword({email,password:authPassword})
-        :await supabase.auth.signUp({
-          email,password:authPassword,
-          options:{
-            data:payload,
-            emailRedirectTo:new URL(import.meta.env.BASE_URL,window.location.origin).toString()
-          }
-        });
-      if(result.error){setError(signupErrorMessage(result.error.message));return;}
-      if(authMode==='signup'){
-        setAuthPassword('');setAuthPasswordConfirm('');
-        setAuthNotice(result.data.session
-          ?'Sua conta foi criada! Vamos concluir os dados do seu escritório.'
-          :'Cadastro solicitado. Se a confirmação por e-mail estiver ativada, confira sua caixa de entrada e Spam. Se já tentou antes, verifique o e-mail antes de pedir outro cadastro.');
-      }
-    }catch(e){setError('Não foi possível concluir a solicitação: '+String(e));}
+      const {error:e}=await supabase.auth.signInWithPassword({email:authEmail.trim().toLowerCase(),password:authPassword});
+      if(e)setError(signupErrorMessage(e.message));
+    }catch(e){setError('Não foi possível entrar: '+String(e));}
     finally{setSaving(false);}
   }
-  async function makeWorkspace(e:FormEvent) {
-    e.preventDefault();if(!supabase||!session)return;
+  async function sendEmailLogin(){
+    if(!supabase)return;
+    setError('');setAuthNotice('');setEmailLoginBusy(true);
+    try{
+      if(!authEmail.trim())throw Error('Informe seu e-mail para receber o link.');
+      const email=authEmail.trim().toLowerCase();
+      const {error:e}=await supabase.auth.signInWithOtp({
+        email,options:{shouldCreateUser:false,emailRedirectTo:new URL(import.meta.env.BASE_URL,window.location.origin).toString()}
+      });
+      if(e)throw Error(signupErrorMessage(e.message));
+      setAuthNotice('Link de acesso enviado para '+email+'. Confira o e-mail e o Spam.');
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setEmailLoginBusy(false);}
+  }
+  async function activateWorkspace(planCode:string,officeName:string){
+    if(!supabase||!session)return;
+    if(!signupPlans.some(p=>p.code===planCode)){setError('Selecione um plano válido.');return;}
     setSaving(true);setError('');
-    const name=newWorkspace.trim();
-    if(name.length<2){setError('Informe o nome do escritório.');setSaving(false);return;}
-    const {data:newId,error:workspaceError}=await supabase.rpc('create_workspace',{workspace_name:name});
-    if(workspaceError){setError(workspaceError.message);setSaving(false);return;}
-    const details=session.user.user_metadata||{};
-    // Dados informados na inscrição são aplicados ao escritório já criado.
-    if(newId){
-      const {error:updateError}=await supabase.from('organizations')
-        .update({
-          tax_id:typeof details.company_tax_id==='string'?details.company_tax_id:'',
-          billing_contact:typeof details.office_phone==='string'?details.office_phone:''
-        }).eq('id',newId);
-      if(updateError)setError('Escritório criado, mas os dados fiscais precisam ser conferidos em Configurações: '+updateError.message);
-    }
-    let {data:org, error:fetchError}=await supabase.from('organizations')
-      .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
-      .eq('id',newId).single();
-    if(fetchError?.code==='42703'){
-      const previous=await supabase.from('organizations')
-        .select('id,name,message_template,tax_id,pix_key,billing_contact')
+    try{
+      const name=officeName.trim();
+      if(name.length<2||name.length>100)throw Error('Informe o nome do escritório.');
+      const {error:profileError}=await supabase.auth.updateUser({data:{selected_plan_code:planCode,office_name:name}});
+      if(profileError)throw Error('Não foi possível registrar o plano: '+profileError.message);
+      const {data:newId,error:workspaceError}=await supabase.rpc('create_workspace',{workspace_name:name});
+      if(workspaceError)throw Error(workspaceError.message);
+      const phone=session.user.user_metadata?.office_phone;
+      if(newId&&typeof phone==='string'&&phone){
+        const {error:contactError}=await supabase.from('organizations').update({billing_contact:phone}).eq('id',newId);
+        if(contactError)console.warn('Contato opcional não atualizado',contactError.code);
+      }
+      const {data:org,error:fetchError}=await supabase.from('organizations')
+        .select('id,name,message_template,tax_id,pix_key,billing_contact,access_status,billing_status,trial_started_at,trial_ends_at')
         .eq('id',newId).single();
-      org=previous.data as typeof org;fetchError=previous.error as typeof fetchError;
-    }
-    if(fetchError)setError('Escritório criado. Atualize a página para entrar: '+fetchError.message);
-    else if(org){
-      setWorkspace(org as Workspace);
-      setWorkspaceName(org.name);
-      setMessageTemplate(org.message_template);
-      setOfficeTaxId(org.tax_id||'');
-      setPixKey(org.pix_key||'');
-      setBillingContact(org.billing_contact||'');
-    }
-    setSaving(false);
+      if(fetchError||!org)throw Error('Escritório criado. Atualize a página: '+(fetchError?.message||'não encontrado'));
+      setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);
+      setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');
+      setPage('overview');
+    }catch(e){setError(e instanceof Error?e.message:String(e));}
+    finally{setSaving(false);}
   }
   async function downloadCharge(item:Obligation){
     if(item.status!=='pending'){setError('O documento de cobrança só pode ser gerado para uma obrigação pendente.');return;}
