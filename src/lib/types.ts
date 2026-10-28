@@ -1,6 +1,7 @@
 export type Client = {
   id: string; org_id?: string; name: string; company: string; tax_id?: string | null; phone: string;
   opt_in: boolean; opt_in_at: string | null; consent_source: string | null;
+  email?: string|null; email_opt_in?: boolean; email_opt_in_at?: string|null; email_consent_source?: string|null;
   active: boolean; created_at?: string;
 };
 export type Obligation = {
@@ -11,7 +12,7 @@ export type Obligation = {
 };
 export type ReminderLog = {
   id: string; org_id: string; obligation_id: string; due_date: string;
-  offset_days: number; status: 'sent' | 'failed' | 'processing';
+  offset_days: number; channel?: 'email' | 'whatsapp'; status: 'sent' | 'failed' | 'processing';
   created_at: string; error?: string | null;
 };
 export const DEFAULT_TEMPLATE = 'Olá, {nome}! Seus honorários contábeis referentes a {documento} vencem em {vencimento}, no valor de {valor}. Segue o aviso de cobrança. Caso já tenha pago, por favor desconsidere.';
