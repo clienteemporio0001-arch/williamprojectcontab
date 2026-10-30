@@ -32,6 +32,9 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  const [tab,setTab]=useState<'home'|'offices'|'plans'|'monitor'|'upgrades'>('home');
  const [data,setData]=useState<Data>({organizations:[],plans:[]});
  const [term,setTerm]=useState('');const [edit,setEdit]=useState<Office|null>(null);
+ const [pendingSignup,setPendingSignup]=useState<Signup|null>(null);
+ const [pendingPlan,setPendingPlan]=useState('');
+ const [pendingActivate,setPendingActivate]=useState(false);
  const [plan,setPlan]=useState('');const [access,setAccess]=useState<'active'|'suspended'>('active');
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
  const [editPrice,setEditPrice]=useState<Plan|null>(null);
@@ -149,15 +152,75 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
    setNotice(startingTrial?'Teste grátis iniciado e registrado no histórico.':'Acesso do escritório atualizado com registro de auditoria.');
  }
 
+ async function activatePaidPlan(){
+   if(!supabase||!edit||busy)return;
+   const selected=data.plans.find(p=>p.code===plan);
+   if(!selected){setError('Escolha um plano válido.');return;}
+   if(!window.confirm('Você CONFIRMOU o recebimento de '+brl(Number(selected.monthly_price_brl))+
+     ' fora da plataforma para '+edit.name+'?\\n\\nAo confirmar, o plano '+selected.name+
+     ' será aplicado e o acesso completo será liberado imediatamente. Esta ação ficará registrada em auditoria.'))return;
+   setBusy(true);setError('');
+   const {error:e}=await supabase.rpc('master_activate_paid_plan',{p_org_id:edit.id,p_plan_code:plan});
+   setBusy(false);
+   if(e){setError('Falha ao liberar plano: '+e.message);return;}
+   setEdit(null);
+   await Promise.all([reload(),loadUpgrades(),loadMonitor()]);
+   setNotice('Pagamento externo confirmado pelo administrador; '+selected.name+' liberado para '+edit.name+'.');
+ }
+ function beginSignup(r:Signup){
+   setPendingSignup(r);
+   setPendingPlan(data.plans.find(p=>p.code===(r.selected_plan_code||''))?.code||data.plans[0]?.code||'');
+   setPendingActivate(false);setError('');setNotice('');
+ }
+ async function provisionSignup(){
+   if(!supabase||!pendingSignup||busy)return;
+   const selected=data.plans.find(p=>p.code===pendingPlan);
+   if(!selected){setError('Escolha um plano válido.');return;}
+   const title=pendingSignup.declared_office_name||pendingSignup.full_name||pendingSignup.email||'Novo cadastro';
+   const prompt=pendingActivate
+     ?'Confirma que RECEBEU O PAGAMENTO de '+brl(Number(selected.monthly_price_brl))+
+      ' diretamente de '+title+'?\\n\\nO escritório será criado com '+selected.name+
+      ' e acesso completo imediato. A ação será auditada.'
+     :'Criar o escritório de '+title+' como ACESSO PENDENTE no plano '+selected.name+
+      '? O usuário não começará o teste grátis automaticamente. Você poderá ativá-lo depois.';
+   if(!window.confirm(prompt))return;
+   setBusy(true);setError('');
+   const {error:e}=await supabase.rpc('master_provision_signup',{
+     p_user_id:pendingSignup.user_id,p_plan_code:pendingPlan,p_activate:pendingActivate
+   });
+   setBusy(false);
+   if(e){
+     setError('Não foi possível vincular o cadastro: '+e.message+
+       (/já pertence/i.test(e.message)?' Atualize a lista de escritórios.':''));
+     return;
+   }
+   const wasActivated=pendingActivate;
+   setPendingSignup(null);
+   await Promise.all([reload(),loadMonitor()]);
+   setNotice(wasActivated
+     ?'Escritório criado e plano '+selected.name+' liberado após confirmação de pagamento externo.'
+     :'Escritório criado com acesso pendente; o cliente aparecerá agora na lista de escritórios.');
+ }
  const pendingUpgrades=upgradeRequests.filter(r=>r.status==='pending');
  const offices=data.organizations;
  const active=offices.filter(o=>o.access_status==='active');
  const paying=active.filter(o=>o.billing_status==='active');
  const visible=useMemo(()=>offices.filter(o=>(o.name+' '+(o.owner_email||'')).toLowerCase().includes(term.toLowerCase())),[offices,term]);
+ const visiblePending=useMemo(()=>monitor.registrations.filter(r=>!r.org_id&&
+   ((r.declared_office_name||'')+' '+(r.full_name||'')+' '+(r.email||'')).toLowerCase().includes(term.toLowerCase())
+ ),[monitor.registrations,term]);
  const trialOffices=offices.filter(o=>o.billing_status==='trialing');
  const runningTrials=trialOffices.filter(o=>remainingTrialDays(o.trial_ends_at||null)>0);
  const expiredTrials=trialOffices.filter(o=>remainingTrialDays(o.trial_ends_at||null)===0);
  const pendingSignups=monitor.registrations.filter(r=>!r.org_id);
+ useEffect(()=>{
+   if(tab!=='offices')return;
+   void reload();void loadMonitor();
+   const interval=window.setInterval(()=>{
+     if(document.visibilityState==='visible'){void reload();void loadMonitor();}
+   },30000);
+   return()=>window.clearInterval(interval);
+ },[tab,reload,loadMonitor]);
  const filteredActivities=monitor.activities.filter(a=>monitorOffice==='all'||a.org_id===monitorOffice);
  const filteredRegistrations=monitor.registrations.filter(r=>monitorOffice==='all'||r.org_id===monitorOffice);
  function begin(o:Office){setEdit(o);setPlan(o.plan_code);setAccess(o.access_status);setExtendDays(trial.trial_days||7);setError('');setNotice('');}
@@ -204,7 +267,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
  return <div className="master-root"><aside className="master-side"><div className="master-logo"><ShieldCheck size={25}/><div><strong>contab<span>flow</span></strong><small>ADMIN MASTER</small></div></div>
   <div className="master-navlabel">GERENCIAMENTO</div>
   <button className={tab==='home'?'current':''} onClick={()=>setTab('home')}><Wallet size={18}/>Visão geral</button>
-  <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length}</small></button>
+  <button className={tab==='offices'?'current':''} onClick={()=>setTab('offices')}><Building2 size={18}/>Escritórios <small>{offices.length+pendingSignups.length}</small></button>
   <button className={tab==='plans'?'current':''} onClick={()=>setTab('plans')}><Settings2 size={18}/>Planos SaaS</button>
   <button className={tab==='monitor'?'current':''} onClick={()=>setTab('monitor')}><Activity size={18}/>Cadastros e atividades <small>{pendingSignups.length}</small></button>
   <button className={tab==='upgrades'?'current':''} onClick={()=>{setTab('upgrades');void loadUpgrades();}}>
@@ -216,7 +279,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
   <main className="master-content"><header className="master-top"><span>ContabFlow / <strong>Admin Master</strong></span><button disabled={busy} onClick={()=>{void reload();void loadMonitor();void loadUpgrades();}}><RefreshCw size={16}/>Atualizar</button></header>
    <div className="master-inner"><p className="master-eyebrow">PAINEL ADMINISTRATIVO</p>
     <h1>{tab==='home'?'Visão geral da plataforma':tab==='offices'?'Escritórios cadastrados':tab==='plans'?'Planos e teste grátis':tab==='upgrades'?'Pedidos de contratação':'Cadastros e atividades'}</h1>
-    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Controle o acesso e o plano de cada contador.':tab==='plans'?'Edite os valores e personalize o teste gratuito dos planos.':tab==='upgrades'?'Confirme pagamentos recebidos e libere os planos solicitados.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
+    <p className="master-sub">{tab==='home'?'Acompanhe sua carteira de escritórios e o uso da plataforma.':tab==='offices'?'Gerencie todos os cadastros, inclusive quem ainda não criou escritório.':tab==='plans'?'Edite os valores e personalize o teste gratuito dos planos.':tab==='upgrades'?'Confirme pagamentos recebidos e libere os planos solicitados.':'Acompanhe cadastros, confirmações de e-mail e ações feitas pelos escritórios.'}</p>
     {error&&<div className="master-alert">{error}</div>}{notice&&<div className="master-alert success">{notice}</div>}
     {busy&&<p className="master-loading">Atualizando informações…</p>}
     {tab==='home'&&<>
@@ -238,8 +301,20 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      </section>
     </>}
     {tab==='offices'&&<section className="master-panel">
-     <div className="master-search"><Search size={18}/><input placeholder="Buscar escritório ou e-mail..." value={term} onChange={e=>setTerm(e.target.value)}/></div>
+     <div className="master-search"><Search size={18}/><input placeholder="Buscar escritório, responsável ou e-mail..." value={term} onChange={e=>setTerm(e.target.value)}/></div>
+     {pendingSignups.length>0&&<div className="master-signup-hint">
+       <strong>{pendingSignups.length} pré-cadastro(s) aguardando escritório.</strong> Aparecem aqui assim que a conta é criada.
+       Use Gerenciar para vincular e, se receber pagamento diretamente, liberar o plano. A ativação nunca acontece sozinha.
+     </div>}
      <div className="master-tablewrap"><table><thead><tr><th>ESCRITÓRIO / RESPONSÁVEL</th><th>PLANO COMERCIAL</th><th>TESTE / ASSINATURA</th><th>CLIENTES</th><th>COBRANÇAS</th><th>ACESSO</th><th></th></tr></thead><tbody>
+     {visiblePending.map(r=><tr key={'signup-'+r.user_id} className="master-pending-row">
+       <td><strong>{r.declared_office_name||r.full_name||'Cadastro sem escritório'}</strong><small>{r.email||'E-mail não informado'}</small></td>
+       <td>{data.plans.find(p=>p.code===r.selected_plan_code)?.name||'Ainda não escolhido'}</td>
+       <td><span className="master-account-state-badge pending">Pré-cadastro · sem teste iniciado</span>
+         <small>{r.verified?'E-mail confirmado':'Aguardando confirmação do e-mail'} · {timestamp(r.registered_at)}</small></td>
+       <td>—</td><td>—</td><td><span className="master-tag suspended">Pendente</span></td>
+       <td><button type="button" disabled={busy} onClick={()=>beginSignup(r)}>Gerenciar</button></td>
+     </tr>)}
      {visible.map(o=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.owner_email||'Não informado'}</small></td>
        <td>{o.plan_name}</td>
        <td><span className={'master-account-state-badge '+(o.billing_status||'unknown')}>{trialLabel(o)}</span>
@@ -248,7 +323,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
        <td>{o.charges_total}</td>
        <td><span className={'master-tag '+o.access_status}>{o.access_status==='active'?'Ativo':'Suspenso'}</span></td>
        <td><button onClick={()=>begin(o)}>Gerenciar</button></td></tr>)}
-     {!visible.length&&<tr><td colSpan={7}>Nenhum escritório encontrado.</td></tr>}</tbody></table></div>
+     {!visible.length&&!visiblePending.length&&<tr><td colSpan={7}>Nenhum cadastro ou escritório encontrado.</td></tr>}</tbody></table></div>
     </section>}
     {tab==='upgrades'&&<section className="master-panel">
        <div className="master-panelhead">
@@ -417,6 +492,30 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
       </div>
     </section>
   </div>}
+  {pendingSignup&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!busy)setPendingSignup(null);}}>
+    <section className="master-modal" role="dialog" aria-modal="true" aria-label="Gerenciar pré-cadastro">
+      <h2>Gerenciar pré-cadastro</h2>
+      <p>{pendingSignup.full_name||pendingSignup.declared_office_name||'Novo cadastro'} — {pendingSignup.email||'Sem e-mail'}</p>
+      <div className="master-account-state"><span className="master-account-state-badge pending">
+        Ainda não criou escritório · {pendingSignup.verified?'E-mail confirmado':'E-mail não confirmado'}
+      </span>
+      <p>Este usuário já está cadastrado. Você pode vincular um escritório e escolher o plano. Nada será cobrado automaticamente.</p></div>
+      <label>Plano comercial<select value={pendingPlan} onChange={e=>setPendingPlan(e.target.value)}>
+        {data.plans.map(p=><option key={p.code} value={p.code}>{p.name} — {brl(Number(p.monthly_price_brl))}/mês · até {p.client_limit} clientes</option>)}
+      </select></label>
+      <label className="master-pending-checkbox"><input type="checkbox" checked={pendingActivate} onChange={e=>setPendingActivate(e.target.checked)}/>
+        <span><strong>Recebi o pagamento diretamente e quero liberar a assinatura</strong>
+        <small>Se desmarcado, o escritório será criado com acesso pendente e sem iniciar teste gratuito.</small></span>
+      </label>
+      {error&&<p className="master-price-error" role="alert">{error}</p>}
+      <div className="master-modalactions">
+        <button type="button" disabled={busy} onClick={()=>setPendingSignup(null)}>Cancelar</button>
+        <button type="button" disabled={busy||!pendingPlan} onClick={()=>void provisionSignup()}>
+          {busy?'Salvando…':pendingActivate?'Confirmar pagamento e liberar':'Criar escritório pendente'}
+        </button>
+      </div>
+    </section>
+  </div>}
   {edit&&<div className="master-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target)setEdit(null);}}><section className="master-modal" role="dialog" aria-modal="true" aria-label="Administrar escritório">
    <h2>Gerenciar escritório</h2><p>{edit.name} — {edit.owner_email||'Sem responsável'}</p>
    <div className="master-account-state">
@@ -449,7 +548,9 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
        <button type="button" disabled={busy} onClick={()=>void changeBilling('extend_trial')}>
          {edit.billing_status==='trialing'?'Prorrogar teste':'Iniciar teste grátis'}
        </button>
-       {edit.billing_status!=='active'&&<button type="button" disabled={busy} onClick={()=>void changeBilling('activate')}>Liberar assinatura</button>}
+       <button type="button" disabled={busy||!plan} onClick={()=>void activatePaidPlan()}>
+         Confirmar pagamento externo e liberar plano
+       </button>
      </div>
      {edit.billing_status==='active'&&<button type="button" className="master-mark-pending"
        disabled={busy} onClick={()=>void changeBilling('pending')}>Colocar em acesso pendente</button>}
@@ -457,6 +558,7 @@ export default function MasterAdmin({canOpenOffice,onOpenOffice}:Props){
      {error&&<p className="master-price-error" role="alert">{error}</p>}
    </div>
    <p className="master-hint">A suspensão impede acesso aos dados operacionais e futuros envios. Não exclui documentos.</p>
+   <p className="master-hint">Para pagamento recebido diretamente, use <strong>Confirmar pagamento externo e liberar plano</strong>: essa ação aplica o plano escolhido e ativa a assinatura de uma vez.</p>
    <div className="master-modalactions"><button onClick={()=>setEdit(null)}>Cancelar</button><button disabled={busy} onClick={()=>void save()}>{busy?'Salvando…':'Salvar alterações'}</button></div>
   </section></div>}
  </div>;
