@@ -3,6 +3,15 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 type Input={officeName:string;officeTaxId:string;pixKey:string;billingContact:string;clientName:string;company:string;clientTaxId:string;service:string;amount:number;dueDate:string};
 const safe=(s:string|undefined)=>String(s||'').replace(/[\r\n]/g,' ').replace(/[^\x20-\x7e\u00a0-\u00ff]/g,'').slice(0,150);
 const date=(s:string)=>s.split('-').reverse().join('/');
+
+export function referenceMonth(dueDate:string):string {
+  const [year,month]=dueDate.split('-').map(Number);
+  if(!Number.isInteger(year)||!Number.isInteger(month)||month<1||month>12)
+    throw new Error('Mês de vencimento inválido');
+  const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return months[(month+10)%12]+'/'+(month===1?year-1:year);
+}
+
 export async function makeDemoChargePdf(data:Input):Promise<Uint8Array>{
  const pdf=await PDFDocument.create();const page=pdf.addPage([595,842]);
  const font=await pdf.embedFont(StandardFonts.Helvetica), bold=await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -27,8 +36,9 @@ export async function makeDemoChargePdf(data:Input):Promise<Uint8Array>{
  if(data.company)y=text('Empresa: '+data.company,48,y);
  if(data.clientTaxId)y=text('CPF/CNPJ: '+data.clientTaxId,48,y);
  y-=25;y=text('SERVICO',48,y,10,true,teal)-8;
- y=text(data.service,48,y,12);y=text('Competencia: '+data.dueDate.slice(0,7).split('-').reverse().join('/'),48,y);
- y-=27;page.drawRectangle({x:48,y:y-43,width:499,height:88,color:rgb(.94,.98,.97)});
+ y=text(data.service,48,y,12);y=text('Mês de referência: '+referenceMonth(data.dueDate),48,y,11,true);
+ // Mantém uma faixa livre antes do quadro com valor e vencimento.
+ y-=45;page.drawRectangle({x:48,y:y-43,width:499,height:88,color:rgb(.94,.98,.97)});
  text('VALOR A PAGAR',66,y+23,10,true,teal);
  text(new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(data.amount),66,y-13,21,true);
  text('VENCIMENTO',360,y+23,10,true,teal);text(date(data.dueDate),360,y-10,15,true);
