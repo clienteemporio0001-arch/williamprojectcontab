@@ -11,6 +11,15 @@ function clean(value:string|undefined, limit=160) {
 function fmtDate(iso:string){
   const [y,m,d]=iso.split('-');return [d,m,y].join('/');
 }
+
+export function referenceMonth(dueDate:string):string {
+  const [year,month]=dueDate.split('-').map(Number);
+  if(!Number.isInteger(year)||!Number.isInteger(month)||month<1||month>12)
+    throw new Error('Mês de vencimento inválido');
+  const months=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  return months[(month+10)%12]+'/'+(month===1?year-1:year);
+}
+
 function brl(value:number){
   return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
 }
@@ -48,8 +57,9 @@ export async function createChargePdf(input:ChargeInfo):Promise<Uint8Array> {
   y-=39;
   text('DESCRICAO DOS SERVICOS',48,y,10,true,teal);y-=26;
   y=wrap(input.service||'Honorarios contabeis',48,y,500,12);
-  text('Competencia: '+clean(input.dueDate.slice(0,7).split('-').reverse().join('/')),48,y-4,11);
-  y-=49;
+  text('Mês de referência: '+referenceMonth(input.dueDate),48,y-4,11,true,navy);
+  // Reserva espaço para a referência antes do quadro de valor: sem sobreposição.
+  y-=70;
   page.drawRectangle({x:48,y:y-36,width:W-96,height:92,color:rgb(.94,.98,.97),borderColor:rgb(.80,.90,.87),borderWidth:1});
   text('VALOR A PAGAR',66,y+30,10,true,teal);
   text(brl(input.amount),66,y,24,true,navy);
