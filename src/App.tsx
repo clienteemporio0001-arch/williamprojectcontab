@@ -106,6 +106,14 @@ export default function App() {
   const [saving,setSaving] = useState(false);
   const [toast,setToast] = useState('');
   const [error,setError] = useState('');
+  const [pdfPreview,setPdfPreview] = useState<{url:string;filename:string}|null>(null);
+
+  useEffect(()=>{
+    if(!pdfPreview)return;
+    const onEscape=(event:KeyboardEvent)=>{if(event.key==='Escape')setPdfPreview(null);};
+    window.addEventListener('keydown',onEscape);
+    return()=>{window.removeEventListener('keydown',onEscape);URL.revokeObjectURL(pdfPreview.url);};
+  },[pdfPreview]);
 
   useEffect(()=>{
     const timer=window.setInterval(()=>setNowTick(Date.now()),60000);
@@ -491,12 +499,11 @@ export default function App() {
         if(e)throw e;
         pdf=data instanceof Blob?data:new Blob([data],{type:'application/pdf'});
       }
-      const link=URL.createObjectURL(pdf);
-      const a=document.createElement('a');
-      a.href=link;a.download='cobranca-'+item.due_date+'.pdf';
-      document.body.append(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(link),10000);
-      notify('PDF de cobrança gerado. Não é comprovante de pagamento.');
+      if(await pdf.slice(0,5).text()!=='%PDF-'){
+        throw new Error('O servidor não retornou um PDF válido. Verifique a função generate-charge.');
+      }
+      setPdfPreview({url:URL.createObjectURL(pdf),filename:'cobranca-'+item.due_date+'.pdf'});
+      notify('Cobrança gerada. Confira a prévia e baixe o PDF quando desejar.');
     }catch(err){setError('Não foi possível gerar a cobrança: '+String(err));}
     finally{setLoading(false);}
   }
@@ -703,7 +710,7 @@ export default function App() {
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
-            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title="Gerar PDF individual" disabled={o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button><button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
+            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title="Gerar e visualizar PDF" disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button><button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
           {!visibleObligations.length&&<tr><td colSpan={5}><div className="empty"><ClipboardList/><strong>Nenhuma obrigação encontrada</strong><p>Adicione uma obrigação para começar.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de cobranças</h2><p>Os dias são configurados individualmente em cada cobrança</p></div><span className="status neutral">Padrão inicial</span></div>
@@ -836,6 +843,19 @@ export default function App() {
               {n>0?n+'d antes':n<0?Math.abs(n)+'d depois':'No dia'}
             </label>)}</div></div>
           {error&&<p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="btn soft" onClick={closeModal}>Cancelar</button><button disabled={saving} className="btn primary">{saving?'Salvando…':'Salvar obrigação'}</button></div></form>}
+      </div>
+    </div>}
+    {pdfPreview&&<div className="modal-overlay pdf-preview-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)setPdfPreview(null);}}>
+      <div className="modal pdf-preview-modal" role="dialog" aria-modal="true" aria-labelledby="pdf-preview-title">
+        <div className="modal-head pdf-preview-head">
+          <div><p className="eyebrow">CONTABFLOW</p><h2 id="pdf-preview-title">Visualizar cobrança em PDF</h2>
+          <p className="subtle small">Documento de cobrança; não comprova pagamento.</p></div>
+          <div className="pdf-preview-actions">
+            <a className="btn primary" href={pdfPreview.url} download={pdfPreview.filename}><FileText size={16}/> Baixar PDF</a>
+            <button type="button" className="icon-button" aria-label="Fechar prévia do PDF" onClick={()=>setPdfPreview(null)}><X size={21}/></button>
+          </div>
+        </div>
+        <iframe className="pdf-preview-frame" title="Prévia da cobrança em PDF" src={pdfPreview.url}/>
       </div>
     </div>}
     <WhatsAppSupport/>
