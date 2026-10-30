@@ -496,7 +496,22 @@ export default function App() {
       }else{
         if(!supabase)throw new Error('Supabase não conectado');
         const {data,error:e}=await supabase.functions.invoke('generate-charge',{body:{obligation_id:item.id}});
-        if(e)throw e;
+        if(e){
+          let detail=e.message||'A geração do PDF falhou no servidor.';
+          const context=(e as {context?:unknown}).context;
+          if(context instanceof Response){
+            try{
+              const responseBody=await context.clone().json() as {error?:string;message?:string};
+              if(typeof responseBody.error==='string')detail=responseBody.error;
+              else if(typeof responseBody.message==='string')detail=responseBody.message;
+              else if(context.status===404)detail='A função generate-charge não foi encontrada no Supabase.';
+              else detail+=' (HTTP '+context.status+')';
+            }catch{
+              detail+=' (HTTP '+context.status+')';
+            }
+          }
+          throw new Error(detail);
+        }
         pdf=data instanceof Blob?data:new Blob([data],{type:'application/pdf'});
       }
       if(await pdf.slice(0,5).text()!=='%PDF-'){
