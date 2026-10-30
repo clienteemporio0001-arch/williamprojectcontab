@@ -775,6 +775,18 @@ export default function App() {
       </div>
     </main>
 
+    <nav className="mobile-bottom-nav" aria-label="Navegação rápida do escritório">
+      {nav.filter(n=>['overview','clients','obligations'].includes(n.id)).map(n=>
+        <button type="button" key={n.id} className={page===n.id?'active':''}
+          onClick={()=>{setPage(n.id);setSearch('');setFilter('all');setMenuOpen(false);}}
+          aria-current={page===n.id?'page':undefined}>
+          <n.icon size={19}/><span>{n.name}</span>
+        </button>)}
+      <button type="button" onClick={()=>setMenuOpen(true)} aria-label="Abrir todos os menus">
+        <Menu size={19}/><span>Mais</span>
+      </button>
+    </nav>
+
     {upgradeOpen&&workspace&&<UpgradePlansModal plans={signupPlans}
       currentPlan={workspace.plan_code||''}
       officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)}
