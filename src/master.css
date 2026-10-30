@@ -309,3 +309,15 @@
   .master-trial-pulse,.master-kpis{grid-template-columns:minmax(0,1fr)}
   .master-kpis article{min-height:88px}
 }
+
+
+/* Pré-cadastros aparecem na mesma lista, sem confusão com assinaturas pagas. */
+.master-signup-hint{margin:0 16px 12px;padding:11px 13px;border:1px solid #36525b;border-radius:10px;background:#123139;color:#c0e6e3;font-size:12px;line-height:1.5}
+.master-signup-hint strong{color:#65e5c6}
+.master-pending-row{background:rgba(52,174,152,.055)}
+.master-pending-row td{vertical-align:middle}
+.master-pending-checkbox{display:flex!important;align-items:flex-start;gap:12px;padding:13px;border:1px solid #36525b;border-radius:10px;background:#123139}
+.master-pending-checkbox input{flex:0 0 auto;width:18px;height:18px;margin-top:3px;accent-color:#48d9b5}
+.master-pending-checkbox span{display:flex;flex-direction:column;gap:4px}
+.master-pending-checkbox strong{color:#def6f1;font-size:12px}
+.master-pending-checkbox small{color:#a9bfca;font-size:11px;line-height:1.45}
