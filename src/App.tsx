@@ -14,7 +14,7 @@ import UpgradePlansModal,{type UpgradePlan} from './UpgradePlansModal';
 import WhatsAppSupport from './WhatsAppSupport';
 import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
-import {normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
+import {leadWorkspaceName,normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
 import {
   type Client, type Obligation, type ReminderLog, DEFAULT_TEMPLATE,
   demoClients, demoObligations, dateISO, daysUntil, money, formatDate,
@@ -66,8 +66,8 @@ export default function App() {
   const [upgradeOpen,setUpgradeOpen] = useState(false);
   const [search,setSearch] = useState('');
   const [filter,setFilter] = useState('all');
-  const [clients,setClients] = useState<Client[]>(() => readDemo('contabflow_clients_v1',demoClients));
-  const [obligations,setObligations] = useState<Obligation[]>(() => readDemo('contabflow_obligations_v1',demoObligations));
+  const [clients,setClients] = useState<Client[]>(() => demo?readDemo('contabflow_clients_v1',demoClients):[]);
+  const [obligations,setObligations] = useState<Obligation[]>(() => demo?readDemo('contabflow_obligations_v1',demoObligations):[]);
   const [logs,setLogs] = useState<ReminderLog[]>([]);
   const [messageTemplate,setMessageTemplate] = useState(() => readDemo('contabflow_message_v1',DEFAULT_TEMPLATE));
   const [workspaceName,setWorkspaceName] = useState(() => readDemo('contabflow_name_v1','Meu escritório'));
@@ -80,6 +80,12 @@ export default function App() {
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
+  const [workspaceChecking,setWorkspaceChecking] = useState(!demo);
+  const [passwordSetupOpen,setPasswordSetupOpen] = useState(false);
+  const [newPassword,setNewPassword] = useState('');
+  const [confirmNewPassword,setConfirmNewPassword] = useState('');
+  const [passwordSetupBusy,setPasswordSetupBusy] = useState(false);
+  const [passwordSetupError,setPasswordSetupError] = useState('');
   const [publicScreen,setPublicScreen] = useState<'landing'|'auth'>('landing');
   const [trialSettings,setTrialSettings] = useState<TrialSettings>(DEFAULT_TRIAL);
   const [nowTick,setNowTick] = useState(Date.now());
@@ -200,32 +206,64 @@ export default function App() {
     return()=>{live=false;window.clearInterval(timer);};
   },[session?.user.id,workspace?.id,workspace?.billing_status,demo]);
 
-  useEffect(() => {
-    if(!supabase) return;
-    if(!session) { setWorkspace(null); setClients([]); setObligations([]); setLogs([]); return; }
+  // Login por e-mail: provisiona o escritório com o teste vigente no Admin Master.
+  // Não libera assinatura paga nem remove os limites operacionais.
+  useEffect(()=>{
+    if(!supabase)return;
+    if(!session){
+      setWorkspace(null);setWorkspaceChecking(false);
+      setClients([]);setObligations([]);setLogs([]);setPasswordSetupOpen(false);
+      return;
+    }
     const s=supabase;
     let valid=true;
+    setWorkspaceChecking(true);
     void (async()=>{
-      try {
-        const {data:membership,error:e} = await s.from('organization_members')
+      try{
+        const {data:membership,error:lookupError}=await s.from('organization_members')
           .select('org_id').eq('user_id',session.user.id).limit(1).maybeSingle();
-        if(e) throw e;
-        if(!membership) {if(valid)setWorkspace(null);return;}
-        let {data:org,error:orgError}=await s.from('organizations')
-          .select('*')
-          .eq('id',membership.org_id).single();
-        if(orgError?.code==='42703'){
-          const previous=await s.from('organizations')
-            .select('id,name,message_template,tax_id,pix_key,billing_contact')
-            .eq('id',membership.org_id).single();
-          org=previous.data as typeof org;orgError=previous.error as typeof orgError;
+        if(lookupError)throw lookupError;
+        let orgId=membership?.org_id;
+        if(!orgId){
+          const suggested=leadWorkspaceName(session.user.user_metadata);
+          if(!suggested){if(valid)setWorkspace(null);return;}
+          const {data:created,error:creationError}=await s.rpc('create_workspace',{workspace_name:suggested});
+          if(creationError){
+            // Se outra aba criou o escritório simultaneamente, retoma a conta já existente.
+            const {data:after,error:afterError}=await s.from('organization_members')
+              .select('org_id').eq('user_id',session.user.id).limit(1).maybeSingle();
+            if(afterError||!after?.org_id)throw new Error('Não foi possível preparar seu escritório: '+creationError.message);
+            orgId=after.org_id;
+          }else{
+            orgId=created as string;
+            if(valid){setToast('Seu painel está pronto! Explore seu teste grátis.');setPage('overview');}
+          }
         }
-        if(orgError)throw orgError;
-        if(valid&&org){setWorkspace(org as Workspace);setWorkspaceName(org.name);setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');setEmailRemindersEnabled(Boolean(org.email_reminders_enabled));setWhatsappRemindersEnabled(Boolean(org.whatsapp_reminders_enabled));}
-      } catch(err) { if(valid)setError(String(err)); }
+        if(!orgId)throw new Error('O escritório ainda não está disponível.');
+        const {data:org,error:orgError}=await s.from('organizations').select('*').eq('id',orgId).single();
+        if(orgError||!org)throw orgError||new Error('Escritório não encontrado');
+        if(valid){
+          setWorkspace(org as Workspace);setWorkspaceName(org.name);
+          setMessageTemplate(org.message_template);setOfficeTaxId(org.tax_id||'');
+          setPixKey(org.pix_key||'');setBillingContact(org.billing_contact||'');
+          setEmailRemindersEnabled(Boolean(org.email_reminders_enabled));
+          setWhatsappRemindersEnabled(Boolean(org.whatsapp_reminders_enabled));setError('');
+        }
+      }catch(err){if(valid){setWorkspace(null);setError(err instanceof Error?err.message:String(err));}}
+      finally{if(valid)setWorkspaceChecking(false);}
     })();
     return()=>{valid=false;};
-  },[session]);
+  },[session?.user.id]);
+
+  // Convite de definição de senha no primeiro acesso de um lead.
+  useEffect(()=>{
+    if(!session||!workspace||demo||session.user.user_metadata?.password_configured)return;
+    if(!leadWorkspaceName(session.user.user_metadata))return;
+    const key='contabflow_password_prompt_'+session.user.id;
+    try{if(sessionStorage.getItem(key))return;sessionStorage.setItem(key,'shown');}
+    catch{ /* sessão privada */ }
+    setPasswordSetupOpen(true);
+  },[session?.user.id,session?.user.user_metadata?.password_configured,workspace?.id,demo]);
 
   useEffect(() => {
     if(!session)return;
@@ -362,6 +400,22 @@ export default function App() {
     });
     if(e)throw Error(signupErrorMessage(e.message));
     return 'Link de acesso enviado para '+email+'. Confira a caixa de entrada ou Spam.';
+  }
+  async function saveFirstPassword(e:FormEvent){
+    e.preventDefault();
+    if(!supabase||!session)return;
+    setPasswordSetupError('');
+    if(newPassword.length<8){setPasswordSetupError('A senha precisa ter pelo menos 8 caracteres.');return;}
+    if(newPassword!==confirmNewPassword){setPasswordSetupError('As senhas não coincidem.');return;}
+    setPasswordSetupBusy(true);
+    try{
+      const {data,error:e}=await supabase.auth.updateUser({password:newPassword,data:{password_configured:true}});
+      if(e)throw new Error(signupErrorMessage(e.message));
+      if(data.user)setSession(previous=>previous?{...previous,user:data.user}:previous);
+      setNewPassword('');setConfirmNewPassword('');setPasswordSetupOpen(false);
+      setToast('Senha criada! Você já pode entrar com e-mail e senha pelo celular.');
+    }catch(err){setPasswordSetupError(err instanceof Error?err.message:String(err));}
+    finally{setPasswordSetupBusy(false);}
   }
   async function submitAuth(e:FormEvent){
     e.preventDefault();
@@ -509,6 +563,7 @@ export default function App() {
   </div></div><WhatsAppSupport/></>;
   if(!demo&&session&&masterStatus==='checking')return <div className="splash"><div className="logo-mark"><ShieldCheck size={30}/></div><p>Verificando permissões…</p></div>;
   if(!demo&&session&&masterStatus==='yes'&&masterView)return <MasterAdmin canOpenOffice={!!workspace} onOpenOffice={()=>setMasterView(false)}/>;
+  if(!demo&&session&&workspaceChecking)return <div className="splash"><div className="logo-mark"><CalendarClock size={30}/></div><p>Preparando sua dashboard…</p></div>;
   if(!demo&&!workspace)return <>
     <ProspectWelcome
       name={typeof session?.user.user_metadata?.full_name==='string'?session.user.user_metadata.full_name:'contador'}
@@ -551,6 +606,11 @@ export default function App() {
         <div className="top-right"><span className="today-pill"><Clock3 size={15}/>{new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',year:'numeric'}).format(new Date())}</span><span className="mini-avatar">{orgLabel[0]?.toUpperCase()||'C'}</span></div>
       </header>
       <div className={'main-content'+(page==='overview'?' overview-dense':'')}>
+        {!demo&&session&&!session.user.user_metadata?.password_configured&&
+          <div className="password-reminder" role="note">
+            <LockKeyhole size={19}/><span><strong>Proteja seu acesso</strong><small>Crie uma senha para entrar pelo celular sem depender de novos links.</small></span>
+            <button type="button" onClick={()=>{setPasswordSetupError('');setPasswordSetupOpen(true);}}>Definir senha</button>
+          </div>}
         {isTrial&&trialDaysLeft>0&&<div className="trial-banner" role="status">
           <Clock3 size={20}/><span><strong>Sua conta está no período de teste gratuito.</strong>
           <span className="trial-subline">Faltam {trialDaysLeft} {trialDaysLeft===1?'dia':'dias'} para o término. Você pode cadastrar até {trialClientLimit} clientes e criar até 3 cobranças, com PDFs personalizados. Os disparos automáticos via WhatsApp não estão disponíveis neste período.</span></span>
@@ -719,6 +779,22 @@ export default function App() {
       currentPlan={workspace.plan_code||''}
       officeName={workspace.name} isTrial={isTrial} onClose={()=>setUpgradeOpen(false)}
       onRequest={requestUpgrade}/>}
+    {!demo&&session&&passwordSetupOpen&&<div className="modal-overlay">
+      <div className="modal first-password-modal" role="dialog" aria-modal="true" aria-labelledby="password-setup-title">
+        <div className="modal-head"><div><p className="eyebrow">PRIMEIRO ACESSO</p><h2 id="password-setup-title">Crie sua senha de acesso</h2></div>
+          <button type="button" className="icon-button" aria-label="Agora não" onClick={()=>setPasswordSetupOpen(false)}><X size={21}/></button></div>
+        <form className="modal-body stack gap-lg" onSubmit={saveFirstPassword}>
+          <p className="subtle">Seu painel já está liberado. Defina uma senha para entrar diretamente no ContabFlow pelo celular e computador.</p>
+          <label>Nova senha *<input type="password" autoComplete="new-password" minLength={8} required value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Pelo menos 8 caracteres"/></label>
+          <label>Confirme a senha *<input type="password" autoComplete="new-password" minLength={8} required value={confirmNewPassword} onChange={e=>setConfirmNewPassword(e.target.value)} placeholder="Repita sua senha"/></label>
+          {passwordSetupError&&<p role="alert" className="form-error">{passwordSetupError}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn soft" onClick={()=>setPasswordSetupOpen(false)}>Agora não</button>
+            <button type="submit" className="btn primary" disabled={passwordSetupBusy}>{passwordSetupBusy?'Salvando…':'Salvar minha senha'}</button>
+          </div>
+        </form>
+      </div>
+    </div>}
     {modal&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)closeModal();}}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><p className="eyebrow">CONTABFLOW</p><h2 id="modal-title">{modal==='client'?(clientDraft.id?'Editar cliente':'Novo cliente'):(obligationDraft.id?'Editar cobrança':'Nova cobrança')}</h2></div><button className="icon-button" aria-label="Fechar" onClick={closeModal}><X size={21}/></button></div>
       {modal==='client'?<form onSubmit={saveClient} className="modal-body stack gap-lg"><div className="form-row"><label>Nome completo *<input autoFocus required value={clientDraft.name} onChange={e=>setClientDraft({...clientDraft,name:e.target.value})} placeholder="Ex.: Maria Silva"/></label><label>Empresa<input value={clientDraft.company} onChange={e=>setClientDraft({...clientDraft,company:e.target.value})} placeholder="Razão social ou fantasia"/></label></div>
