@@ -14,8 +14,8 @@ type Props={onLogin:()=>void;onLead:(lead:Lead)=>Promise<string>;trial:TrialSett
 const brl=(n:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 
 const QUESTIONS=[
-  {q:'Preciso informar CNPJ para conhecer?',a:'Não. Primeiro, basta seu nome, WhatsApp e e-mail. Você escolhe o plano e informa o nome do escritório somente quando decidir iniciar a avaliação.'},
-  {q:'O teste começa assim que cadastro meu e-mail?',a:'Não. Você pode entrar e conhecer seu painel. O prazo da avaliação só começa quando você escolhe um plano e ativa seu escritório.'},
+  {q:'Preciso informar CNPJ para conhecer?',a:'Não. Primeiro, basta seu nome, WhatsApp e e-mail. Você pode acessar sua dashboard e escolher um plano dentro da plataforma. O nome inicial do escritório poderá ser alterado em Configurações.'},
+  {q:'O teste começa assim que cadastro meu e-mail?',a:'Não. Você recebe um link por e-mail. O teste começa quando você confirma o acesso e entra no seu escritório pela primeira vez.'},
   {q:'O teste exige cartão de crédito?',a:'Não. O ContabFlow não solicita cartão para ativar a avaliação e não faz cobrança automática ao seu término.'},
   {q:'O ContabFlow envia WhatsApp sozinho?',a:'O produto prepara mensagens e organiza lembretes. O envio automático depende de ativação da API oficial do WhatsApp, modelos aprovados e autorização do destinatário; não está disponível na avaliação.'},
   {q:'O ContabFlow substitui meu sistema contábil?',a:'Não. O foco inicial é organizar honorários, gerar documentos de cobrança e acompanhar vencimentos, complementando a operação do escritório.'}
@@ -82,7 +82,7 @@ export default function MarketingLanding({onLogin,onLead,trial}:Props){
         <div id="começar" className="landing-lead-card">
           <div className="landing-lead-top"><span className="landing-lead-icon"><Sparkles size={20}/></span><span>SEU PRIMEIRO PASSO</span></div>
           <h2>Seu escritório mais leve começa aqui.</h2>
-          <p>Três informações. Um acesso ao seu painel. O plano você escolhe lá dentro.</p>
+          <p>Três informações. Seu painel liberado pelo link de e-mail. Defina uma senha no primeiro acesso e escolha o plano lá dentro.</p>
           <form onSubmit={submit} className="landing-lead-form">
             <label htmlFor="lead-name">Seu nome</label>
             <input id="lead-name" autoComplete="name" minLength={3} maxLength={120} required value={name}
@@ -98,7 +98,7 @@ export default function MarketingLanding({onLogin,onLead,trial}:Props){
             <button type="submit" className="landing-cta" disabled={submitting}>
               {submitting?'Enviando acesso…':'Conhecer meu painel'} <ArrowRight size={18}/>
             </button>
-            <small><LockKeyhole size={13}/> Enviaremos um link seguro de entrada por e-mail. O teste só começa quando você ativá-lo. <a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.</small>
+            <small><LockKeyhole size={13}/> Enviaremos um link seguro por e-mail. No primeiro acesso você poderá definir uma senha e entrar na dashboard; o teste começa nessa entrada. <a href={`${import.meta.env.BASE_URL}privacidade.html`} target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.</small>
           </form>
         </div>
       </section>
