@@ -31,3 +31,11 @@ export function signupErrorMessage(raw:string):string{
   if(/password.*(weak|short|6 char)/i.test(message))return 'Sua senha não atende aos requisitos do Supabase. Escolha uma senha mais forte.';
   return raw;
 }
+
+/** Nome temporário do espaço do lead. O plano/limites seguem exclusivos do banco. */
+export function leadWorkspaceName(metadata:Record<string,unknown>|null|undefined):string|null{
+  const name=typeof metadata?.full_name==='string'?metadata.full_name.trim().replace(/\s+/g,' '):'';
+  const phone=typeof metadata?.office_phone==='string'?normalizeBrazilPhone(metadata.office_phone):null;
+  if(name.length<3||!phone)return null;
+  return ('Escritório de '+name).slice(0,100);
+}
