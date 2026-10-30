@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {normalizeBrazilPhone,validCNPJ,signupErrorMessage} from '../src/lib/registration.ts';
+import {leadWorkspaceName,normalizeBrazilPhone,validCNPJ,signupErrorMessage} from '../src/lib/registration.ts';
 assert.equal(validCNPJ('04.252.011/0001-10'),true);
 assert.equal(validCNPJ('00.000.000/0000-00'),false);
 assert.equal(validCNPJ('04.252.011/0001-11'),false);
@@ -9,4 +9,9 @@ assert.equal(normalizeBrazilPhone('123'),null);
 assert.match(signupErrorMessage('For security purposes, you can only request this after 50 seconds.'),/50 segundos/);
 assert.match(signupErrorMessage('Email not confirmed'),/Confirme seu endereço/);
 assert.match(signupErrorMessage('Failed to fetch'),/Não foi possível conectar ao servidor/);
-console.log('OK: validação de cadastro e mensagens de segurança funcionando.');
+assert.equal(leadWorkspaceName({full_name:'Ana Silva',office_phone:'5568999999999'}),'Escritório de Ana Silva');
+assert.equal(leadWorkspaceName({full_name:'Ana Silva'}),null);
+assert.equal(leadWorkspaceName({full_name:'Ana Silva',office_phone:'123'}),null);
+assert.equal(leadWorkspaceName({full_name:'  Ana   Silva ',office_phone:'(68) 99999-9999'}),'Escritório de Ana Silva');
+assert.ok((leadWorkspaceName({full_name:'A'.repeat(120),office_phone:'5568999999999'})||'').length<=100);
+console.log('OK: validação de cadastro, primeiro acesso e mensagens de segurança funcionando.');
