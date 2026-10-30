@@ -593,3 +593,24 @@
   .first-password-modal .modal-head{padding:16px}
   .first-password-modal .modal-body{padding:16px}
 }
+
+
+/* Prévia da cobrança: o PDF abre no painel, sem exigir pop-up externo. */
+.pdf-preview-overlay{z-index:105;padding:16px}
+.pdf-preview-modal{width:min(1000px,100%);height:min(94dvh,1000px);max-height:94dvh;overflow:hidden}
+.pdf-preview-head{padding:14px 20px;gap:16px;align-items:center}
+.pdf-preview-head .eyebrow{margin-bottom:4px}
+.pdf-preview-head h2{font-size:18px}
+.pdf-preview-head .subtle{margin:6px 0 0}
+.pdf-preview-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.pdf-preview-actions .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.pdf-preview-frame{flex:1;width:100%;min-height:0;border:0;background:#fff}
+@media(max-width:610px){
+ .pdf-preview-overlay{padding:5px}
+ .pdf-preview-modal{height:calc(100dvh - 10px);max-height:calc(100dvh - 10px);border-radius:10px}
+ .pdf-preview-head{padding:12px;gap:8px}
+ .pdf-preview-head h2{font-size:14px}
+ .pdf-preview-head .subtle{font-size:10px}
+ .pdf-preview-actions{gap:6px}
+ .pdf-preview-actions .btn{padding:9px 10px;font-size:11px}
+}
