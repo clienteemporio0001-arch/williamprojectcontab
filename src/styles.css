@@ -554,3 +554,42 @@
   .app-shell .page-header h1{font-size:21px}
   .welcome-sample-numbers{grid-template-columns:minmax(0,1fr)}
 }
+
+
+/* Primeiro acesso com senha e dashboard mobile: sem alterar o visual desktop */
+.password-reminder{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:12px 16px;border:1px solid #2b7667;background:#163a38;border-radius:11px;color:#85eed2}
+.password-reminder>svg{flex:0 0 auto}
+.password-reminder>span{display:grid;gap:4px;flex:1;min-width:0}
+.password-reminder strong{font-size:12px;color:#e2fff5}
+.password-reminder small{font-size:11px;color:#a4d5ca;line-height:1.5}
+.password-reminder button{background:#44dbb4;color:#06352a;border:0;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:800;min-height:41px}
+.first-password-modal{width:min(470px,100%);max-height:calc(100dvh - 24px)}
+.first-password-modal .modal-body>label{display:grid;gap:7px;font-size:12px;font-weight:700;color:#cbe4e3}
+.first-password-modal input{width:100%;min-height:45px;border:1px solid #365267;border-radius:9px;background:#09192b;color:#f2fafa;padding:11px 13px;font-size:16px}
+.first-password-modal input:focus-visible{outline:2px solid #48dab7;outline-offset:1px}
+.mobile-bottom-nav{display:none}
+
+@media(max-width:760px){
+  .app-shell{min-width:0;width:100%;overflow-x:clip}
+  .app-shell .main{width:100%;min-width:0}
+  .app-shell .main-content{padding-bottom:calc(105px + env(safe-area-inset-bottom))}
+  .app-shell .mobile-bottom-nav{
+    position:fixed;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    bottom:0;left:0;right:0;z-index:24;
+    padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+    border-top:1px solid #2b4056;background:#0b1729;
+    box-shadow:0 -9px 30px #0006
+  }
+  .mobile-bottom-nav button{
+    display:flex;align-items:center;justify-content:center;flex-direction:column;
+    min-width:0;min-height:50px;gap:5px;padding:6px 2px;border:0;border-radius:8px;
+    color:#91a9be;background:transparent;font-size:10px;font-weight:700
+  }
+  .mobile-bottom-nav button.active{color:#65e8c5;background:#163d37}
+  .mobile-bottom-nav button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  .app-shell .support-float{bottom:calc(79px + env(safe-area-inset-bottom));right:12px}
+  .password-reminder{flex-wrap:wrap;padding:12px;gap:9px}
+  .password-reminder button{width:100%}
+  .first-password-modal .modal-head{padding:16px}
+  .first-password-modal .modal-body{padding:16px}
+}
