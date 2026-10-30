@@ -42,3 +42,29 @@
 @media(max-width:680px){.upgrade-backdrop{padding:8px}.upgrade-dialog{max-height:96vh}.upgrade-dialog-head{padding:16px 14px}.upgrade-dialog-icon{width:33px;height:33px;flex-shrink:0}.upgrade-dialog-head h2{font-size:19px}
 .upgrade-lead{padding:13px 15px 0}.upgrade-plan-grid{grid-template-columns:1fr;gap:12px;padding:16px}.upgrade-plan{gap:12px}.upgrade-plan-head{display:flex;min-height:0}.upgrade-benefits{min-height:0;grid-template-columns:1fr 1fr;gap:10px}.upgrade-summary{display:grid;padding:17px}.upgrade-primary{width:100%}.upgrade-disclaimer{padding:0 17px 18px}.upgrade-error{margin:0 16px 14px}}
 @media(prefers-reduced-motion:reduce){.upgrade-backdrop{backdrop-filter:none}}
+
+
+/* Mobile: contratação em uma coluna, ações alcançáveis com teclado ou toque. */
+@media(max-width:760px){
+ .upgrade-backdrop{padding:8px;align-items:center}
+ .upgrade-dialog{width:100%;max-width:100%;max-height:calc(100dvh - 16px);overflow-y:auto;overscroll-behavior:contain}
+ .upgrade-dialog-head{padding:14px;gap:9px}
+ .upgrade-dialog-head>div:nth-child(2){min-width:0}
+ .upgrade-plan-grid{grid-template-columns:minmax(0,1fr);padding:16px;gap:12px}
+ .upgrade-plan{min-width:0}
+ .upgrade-benefits{min-height:0}
+ .upgrade-summary{padding:14px;gap:12px}
+ .upgrade-summary-info{min-width:0}
+ .upgrade-summary-info small{overflow-wrap:anywhere}
+ .upgrade-primary,.upgrade-contact-link,.upgrade-plan-btn{min-height:44px;white-space:normal;text-align:center}
+}
+@media(max-width:480px){
+ .upgrade-dialog-head h2{font-size:18px;overflow-wrap:anywhere}
+ .upgrade-lead{padding:12px 14px 0}
+ .upgrade-plan-grid{padding:14px}
+ .upgrade-benefits{grid-template-columns:minmax(0,1fr);gap:10px}
+ .upgrade-summary{display:grid}
+ .upgrade-summary-info{align-items:flex-start}
+ .upgrade-primary,.upgrade-contact-link{width:100%}
+ .upgrade-disclaimer{padding:0 14px 16px;overflow-wrap:anywhere}
+}
