@@ -1,6 +1,6 @@
 // Authenticated PDF generation. The client sends ONLY obligation_id.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createChargePdf } from '../_shared/billing_pdf.ts';
+import { ensureChargeDocument } from '../_shared/charge_document.ts';
 
 Deno.serve(async(req:Request)=>{
   const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
@@ -30,29 +30,20 @@ Deno.serve(async(req:Request)=>{
   const client=obligation.clients as unknown as {name:string;company:string;tax_id:string|null};
   const office=obligation.organizations as unknown as {name:string;tax_id:string;pix_key:string;billing_contact:string};
   try{
-    const bytes=await createChargePdf({
+    const admin=createClient(url,service,{auth:{persistSession:false}});
+    const result=await ensureChargeDocument(admin,obligation.org_id,obligation.id,{
       officeName:office.name,officeTaxId:office.tax_id,pixKey:office.pix_key,billingContact:office.billing_contact,
       clientName:client.name,company:client.company,clientTaxId:client.tax_id||'',
       service:obligation.title,amount:Number(obligation.amount),dueDate:obligation.due_date
     });
-    const admin=createClient(url,service,{auth:{persistSession:false}});
-    const path=obligation.org_id+'/'+obligation.id+'.pdf';
-    const {error:uploadError}=await admin.storage.from('billing-documents').upload(path,bytes,{
-      contentType:'application/pdf',upsert:true,cacheControl:'0'
-    });
-    if(uploadError)throw uploadError;
-    const {error:logError}=await admin.from('billing_documents').upsert({
-      org_id:obligation.org_id,obligation_id:obligation.id,storage_path:path,
-      generated_at:new Date().toISOString()
-    },{onConflict:'obligation_id'});
-    if(logError)throw logError;
-    // Auditoria administrativa: conta PDFs realmente gerados (sem armazenar conteúdo).
-    // A geração do documento não deve falhar caso a Etapa 6 ainda não tenha sido instalada.
-    const {error:activityError}=await admin.from('saas_activity_events').insert({
-      org_id:obligation.org_id, actor_user_id:user.id,entity_id:obligation.id,
-      event_type:'pdf_generated'
-    });
-    if(activityError)console.warn('Registro de atividade PDF indisponível:',activityError.code);
+    const bytes=result.bytes;
+    // PDF previamente emitido é baixado, não recriado nem cobrado novamente.
+    if(result.created){
+      const {error:activityError}=await admin.from('saas_activity_events').insert({
+        org_id:obligation.org_id,actor_user_id:user.id,entity_id:obligation.id,event_type:'pdf_generated'
+      });
+      if(activityError)console.warn('Registro da emissão de PDF indisponível:',activityError.code);
+    }
     return new Response(new Uint8Array(bytes),{
       status:200,headers:{...cors,'Content-Type':'application/pdf',
         'Content-Disposition':'attachment; filename="cobranca-'+obligation.due_date+'.pdf"',
