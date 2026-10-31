@@ -352,30 +352,77 @@ export default function App() {
     }
     setSaving(false);closeModal();notify(clientDraft.id?'Cliente atualizado.':'Cliente cadastrado.');setPage('clients');
   }
+  async function purgeRecord(kind:'client'|'obligation',recordId:string){
+    if(!supabase||!workspace)throw Error('Faça login no escritório para excluir.');
+    const {data,error:e}=await supabase.functions.invoke('delete-office-record',{
+      body:{org_id:workspace.id,record_id:recordId,kind,confirmation:'EXCLUIR'}
+    });
+    if(e||data?.error||data?.deleted!==true){
+      let detail=typeof data?.error==='string'?data.error:e?.message||'Exclusão não confirmada pelo servidor.';
+      const context=(e as {context?:unknown}|null)?.context;
+      if(context instanceof Response){
+        try{
+          const result=await context.clone().json() as {error?:string};
+          if(result?.error)detail=result.error;
+        }catch{ /* resposta indisponível */ }
+      }
+      throw Error(detail);
+    }
+    return {chargesDeleted:Number(data.charges_deleted||0)};
+  }
+
   async function deleteClient(client:Client){
     if(loading)return;
-    if(!window.confirm('Você tem certeza de que deseja excluir o cliente "'+client.name+'"? Essa ação não poderá ser desfeita.'))return;
-    // Manter o histórico financeiro de clientes que já têm cobranças.
-    if(obligations.some(o=>o.client_id===client.id)){
-      setError('Este cliente possui cobranças vinculadas. Para preservar o histórico, edite o cliente e desative a opção Cliente ativo.');return;
-    }
+    const linked=obligations.filter(o=>o.client_id===client.id);
+    const message='Você tem certeza de que deseja excluir DEFINITIVAMENTE o cliente "'+
+      client.name+'"?\n\nSerão removidos também '+linked.length+
+      ' cobrança(s), PDFs, registros de pagamento e histórico de lembretes vinculados.\n\nESTA AÇÃO NÃO PODE SER DESFEITA.';
+    if(!window.confirm(message))return;
     if(demo){
+      const ids=new Set(linked.map(o=>o.id));
       setClients(prev=>prev.filter(c=>c.id!==client.id));
-      notify('Cliente excluído.');
+      setObligations(prev=>prev.filter(o=>o.client_id!==client.id));
+      setLogs(prev=>prev.filter(log=>!ids.has(log.obligation_id)));
+      setStoredPdfIds(prev=>new Set([...prev].filter(id=>!ids.has(id))));
+      if(pdfPreview&&ids.has(pdfPreview.obligationId))setPdfPreview(null);
+      notify('Cliente e '+linked.length+' cobrança(s) excluídos.');
       return;
     }
-    if(!supabase||!workspace)return;
     setLoading(true);setError('');
     try{
-      const {data,error:e}=await supabase.from('clients').delete()
-        .eq('id',client.id).eq('org_id',workspace.id).select('id');
-      if(e)throw new Error(e.code==='23503'
-        ?'Este cliente possui registros vinculados e não pode ser excluído. Desative o cliente para preservar o histórico.'
-        :e.message);
-      if(!data?.length)throw new Error('A exclusão não foi confirmada pelo banco. Confira suas permissões e tente novamente.');
+      const result=await purgeRecord('client',client.id);
+      const ids=new Set(linked.map(o=>o.id));
       setClients(prev=>prev.filter(c=>c.id!==client.id));
-      notify('Cliente excluído com sucesso.');
+      setObligations(prev=>prev.filter(o=>o.client_id!==client.id));
+      setLogs(prev=>prev.filter(log=>!ids.has(log.obligation_id)));
+      setStoredPdfIds(prev=>new Set([...prev].filter(id=>!ids.has(id))));
+      if(pdfPreview&&ids.has(pdfPreview.obligationId))setPdfPreview(null);
+      notify('Cliente excluído definitivamente, com '+result.chargesDeleted+' cobrança(s) vinculada(s).');
     }catch(e){setError('Não foi possível excluir o cliente: '+(e instanceof Error?e.message:String(e)));}
+    finally{setLoading(false);}
+  }
+
+  async function deleteObligation(item:Obligation){
+    if(loading)return;
+    if(!window.confirm('Tem certeza de que deseja excluir DEFINITIVAMENTE a cobrança "'+item.title+
+      '" com vencimento em '+formatDate(item.due_date)+'?\n\nSerão excluídos também o PDF, registros de pagamento e histórico de envios desta cobrança. O cliente continuará cadastrado.\n\nESTA AÇÃO NÃO PODE SER DESFEITA.'))return;
+    if(demo){
+      setObligations(prev=>prev.filter(o=>o.id!==item.id));
+      setLogs(prev=>prev.filter(log=>log.obligation_id!==item.id));
+      setStoredPdfIds(prev=>{const ids=new Set(prev);ids.delete(item.id);return ids;});
+      if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
+      notify('Cobrança excluída definitivamente.');
+      return;
+    }
+    setLoading(true);setError('');
+    try{
+      await purgeRecord('obligation',item.id);
+      setObligations(prev=>prev.filter(o=>o.id!==item.id));
+      setLogs(prev=>prev.filter(log=>log.obligation_id!==item.id));
+      setStoredPdfIds(prev=>{const ids=new Set(prev);ids.delete(item.id);return ids;});
+      if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
+      notify('Cobrança, PDF e histórico vinculados excluídos definitivamente.');
+    }catch(e){setError('Não foi possível excluir a cobrança: '+(e instanceof Error?e.message:String(e)));}
     finally{setLoading(false);}
   }
 
@@ -876,7 +923,7 @@ export default function App() {
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
-            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title={storedPdfIds.has(o.id)?'Visualizar PDF emitido':'Gerar e visualizar PDF'} disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button>{storedPdfIds.has(o.id)&&o.status==='pending'&&<button className="icon-button" title="Excluir PDF não enviado e liberar correção" aria-label="Excluir PDF da cobrança" disabled={loading} onClick={()=>void deleteChargePdf(o)}><Trash2 size={16}/></button>}<button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
+            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title={storedPdfIds.has(o.id)?'Visualizar PDF emitido':'Gerar e visualizar PDF'} disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button>{storedPdfIds.has(o.id)&&o.status==='pending'&&<button className="icon-button" title="Excluir PDF não enviado e liberar correção" aria-label="Excluir PDF da cobrança" disabled={loading} onClick={()=>void deleteChargePdf(o)}><Trash2 size={16}/></button>}<button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button><button className="icon-button" title="Excluir cobrança definitivamente (inclui PDF e histórico)" aria-label={'Excluir cobrança '+o.title} disabled={loading} onClick={()=>void deleteObligation(o)}><Trash2 size={16}/></button></div></td></tr>)}
           {!visibleObligations.length&&<tr><td colSpan={5}><div className="empty"><ClipboardList/><strong>Nenhuma obrigação encontrada</strong><p>Adicione uma obrigação para começar.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de cobranças</h2><p>Os dias são configurados individualmente em cada cobrança</p></div><span className="status neutral">Padrão inicial</span></div>
