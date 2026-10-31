@@ -6,7 +6,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { ensureChargeDocument } from '../_shared/charge_document.ts';
 
-type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null;email_reminders_enabled:boolean;whatsapp_reminders_enabled:boolean };
+type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;logo_path:string|null;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null;email_reminders_enabled:boolean;whatsapp_reminders_enabled:boolean };
 type Client = { id:string; name:string; phone:string;company?:string;tax_id?:string;email:string|null;email_opt_in:boolean;email_opt_in_at:string|null;email_consent_source:string|null;active:boolean;opt_in:boolean;opt_in_at:string|null };
 type Obligation = {
   id:string; org_id:string; client_id:string; title:string; due_date:string;
@@ -127,7 +127,7 @@ Deno.serve(async(req:Request)=>{
     organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,
     sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
   let orgQuery=db.from('organizations')
-    .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled');
+    .select('id,name,timezone,tax_id,pix_key,billing_contact,logo_path,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled');
   if(testNow)orgQuery=orgQuery.eq('id',testOrg);
   const {data:orgs,error:orgError}=await orgQuery.limit(200);
   if(orgError)return fail(orgError.message);
@@ -268,7 +268,7 @@ Deno.serve(async(req:Request)=>{
         if(!pdf){
           try{
             const result=await ensureChargeDocument(db,org.id,item.id,{
-              officeName:org.name,officeTaxId:org.tax_id,pixKey:org.pix_key,
+              officeName:org.name,officeTaxId:org.tax_id,pixKey:org.pix_key,logoPath:org.logo_path,
               billingContact:org.billing_contact,clientName:client.name,
               company:client.company||'',clientTaxId:client.tax_id||'',
               service:item.title,amount:Number(item.amount),dueDate:item.due_date
