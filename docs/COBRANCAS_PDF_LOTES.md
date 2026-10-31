@@ -4,7 +4,10 @@
 - Cada cobrança `obligations.id` corresponde a um arquivo imutável em bucket privado `billing-documents`, no caminho `org_id/obligation_id.pdf`.
 - `generate-charge` e `dispatch-reminders` usam a mesma função `ensureChargeDocument`. A primeira execução cria o documento, as seguintes baixam **o mesmo arquivo**, mesmo para canais diferentes ou vários dias de lembrete.
 - O upload nunca usa `upsert:true`; se duas execuções gerarem a mesma cobrança ao mesmo tempo, uma delas reutiliza o arquivo da outra. A tabela `billing_documents` mantém o registro.
-- Não se altera um PDF já emitido silenciosamente. Se valor, vencimento ou dados do favorecido mudarem, crie uma cobrança corrigida e cancele a anterior; não reaproveite o aviso com dados desatualizados.
+- Não se altera um PDF já emitido silenciosamente. Se o arquivo ainda **não possui nenhuma tentativa de envio**, a interface permite **Excluir PDF** explicitamente, usando a operação autenticada `generate-charge {action:"delete"}`. A função verifica RLS da cobrança, status pendente e ausência de `reminder_logs`, remove o arquivo do Storage pela API oficial e elimina seu registro em `billing_documents`; depois o contador edita a data/valor e gera um novo PDF ao clicar em **PDF**.
+- Se já houver histórico de disparo (`processing`, `failed`, `sent`, `delivered` ou `read`), não é possível excluir o aviso: crie uma cobrança corrigida e cancele a antiga. Isso também vale para situações incertas após uma tentativa de envio.
+- A migration `202610310001_guard_issued_charge_changes.sql` impede no banco a alteração silenciosa de cliente, descrição, valor e vencimento enquanto houver um PDF ou histórico. Mudanças no contato do escritório e dados mestres não reescrevem PDFs antigos.
+- A primeira emissão evita download desnecessário de um arquivo inexistente. Reabrir o PDF baixa o mesmo objeto privado, sem gerar outra cópia; não usa `upsert:true` no Storage.
 - Armazenamento privado, sem URL pública do documento.
 
 ## Lotes e deduplicação
