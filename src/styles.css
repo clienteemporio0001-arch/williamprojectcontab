@@ -683,3 +683,24 @@
  .office-logo-copy{flex:1 1 190px}
  .office-logo-copy>small{font-size:10px}
 }
+
+
+/* Histórico do cliente: dados em memória, visual CRM, responsivo. */
+.client-history-modal{width:min(1060px,calc(100vw - 24px));max-height:93dvh;overflow:auto}
+.client-history-body{padding:20px;display:grid;gap:15px}
+.client-history-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;color:#a2b7c8;font-size:12px}
+.client-history-controls select{background:#14263a;border:1px solid #345066;border-radius:8px;color:#d5f5eb;padding:8px 12px}
+.client-history-controls span{margin-left:auto}
+.client-history-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.client-history-metrics>div{border:1px solid #2a4055;background:#112238;border-radius:10px;padding:15px 12px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.client-history-metrics small{color:#a6bfd0;font-size:10px}
+.client-history-metrics strong{color:#e7faf3;font:800 clamp(16px,2vw,23px) Manrope,sans-serif;overflow-wrap:anywhere}
+.client-history-metrics span{color:#839dad;font-size:10px}
+.client-history-metrics>div:nth-child(2) strong{color:#58ddb6}
+.client-history-metrics>div:nth-child(3) strong{color:#f9c9a5}
+.client-history-info{background:#1a2a3c;border:1px solid #30465d;border-radius:8px;color:#b9ccd9;padding:11px 12px;margin:0;font-size:11px;line-height:1.6}
+.client-history-info strong{color:#fdad93}
+.client-history-pagination{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:#9cb3c5;font-size:11px}
+.client-history-pagination>div{display:flex;gap:7px}
+.client-history-pagination .btn{padding:7px 10px}
+@media(max-width:760px){.client-history-modal{width:calc(100vw - 10px);max-height:96dvh}.client-history-body{padding:12px}.client-history-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.client-history-metrics>div{padding:11px 9px}.client-history-metrics strong{font-size:17px}.client-history-controls span{margin-left:0}}
