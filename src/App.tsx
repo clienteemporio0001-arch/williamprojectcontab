@@ -71,6 +71,9 @@ export default function App() {
   const [trialGuideOpen,setTrialGuideOpen] = useState(true);
   const [upgradeOpen,setUpgradeOpen] = useState(false);
   const [search,setSearch] = useState('');
+  const [historyClientId,setHistoryClientId] = useState<string|null>(null);
+  const [historyPage,setHistoryPage] = useState(0);
+  const [historyYear,setHistoryYear] = useState('all');
   const [filter,setFilter] = useState('all');
   const [monthOffset,setMonthOffset] = useState(0);
   const [clients,setClients] = useState<Client[]>(() => demo?readDemo('contabflow_clients_v1',demoClients):[]);
@@ -782,6 +785,28 @@ export default function App() {
       filter==='soon'?o.status==='pending'&&daysUntil(o.due_date)>=0&&daysUntil(o.due_date)<=7:o.status===filter));
   });
   const visibleClients=clients.filter(c=>[c.name,c.company,c.phone].join(' ').toLowerCase().includes(search.toLowerCase()));
+  // Histórico exclusivamente dos dados já carregados: nenhuma nova query, tabela ou PDF.
+  const historyClient=clients.find(c=>c.id===historyClientId);
+  const historyEntries=useMemo(()=>obligations.filter(o=>o.client_id===historyClientId)
+    .sort((a,b)=>b.due_date.localeCompare(a.due_date)),[obligations,historyClientId]);
+  const historyYears=useMemo(()=>[...new Set(historyEntries.map(o=>o.due_date.slice(0,4)))].sort().reverse(),[historyEntries]);
+  const historyFiltered=useMemo(()=>historyEntries.filter(o=>historyYear==='all'||o.due_date.startsWith(historyYear+'-')),[historyEntries,historyYear]);
+  const historyStats=useMemo(()=>{
+    const today=dateISO();
+    const valid=historyFiltered.filter(o=>o.status!=='cancelled');
+    const sum=(arr:Obligation[])=>arr.reduce((total,o)=>total+(o.amount||0),0);
+    const pending=valid.filter(o=>o.status==='pending');
+    const scheduled=pending.filter(o=>o.due_date>today);
+    const overdue=pending.filter(o=>o.due_date<today);
+    return {
+      total:sum(valid),received:sum(valid.filter(o=>o.status==='paid')),
+      pending:sum(pending),scheduled:sum(scheduled),overdue:sum(overdue),
+      totalCount:valid.length,paidCount:valid.filter(o=>o.status==='paid').length,
+      unpriced:valid.filter(o=>o.amount===null).length
+    };
+  },[historyFiltered,nowTick]);
+  const historyPages=Math.max(1,Math.ceil(historyFiltered.length/12));
+  const historyVisible=historyFiltered.slice(historyPage*12,(historyPage+1)*12);
   const nextFive=ordered.filter(o=>o.status==='pending').slice(0,5);
   const orgLabel=workspace?.name || workspaceName;
   const workspaceAllowed=demo||!workspace||(!workspace.billing_status&&workspace.access_status!=='suspended')||
@@ -981,7 +1006,7 @@ export default function App() {
           <div className="table-wrap"><table><thead><tr><th>CLIENTE / EMPRESA</th><th>WHATSAPP</th><th>AUTORIZAÇÃO</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleClients.map(c=><tr key={c.id}><td><div className="person"><span className="person-avatar">{c.name[0]?.toUpperCase()}</span><div><strong>{c.name}</strong><span>{c.company||'Pessoa física'}</span></div></div></td><td>{c.phone}</td>
             <td><span className={'status '+(c.opt_in?'paid':'neutral')}>{c.opt_in?'Autorizado':'Sem autorização'}</span></td><td><span className={'status '+(c.active?'neutral':'muted')}>{c.active?'Ativo':'Inativo'}</span></td>
-            <td><div className="actions"><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button><button className="icon-button" title="Excluir cliente" aria-label={'Excluir cliente '+c.name} disabled={loading} onClick={()=>openDeleteConfirmation('client',c.id)}><Trash2 size={16}/></button></div></td></tr>)}
+            <td><div className="actions"><button className="btn tiny soft" onClick={()=>{setHistoryClientId(c.id);setHistoryPage(0);setHistoryYear('all');setError('');}}><FileText size={14}/>Histórico</button><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button><button className="icon-button" title="Excluir cliente" aria-label={'Excluir cliente '+c.name} disabled={loading} onClick={()=>openDeleteConfirmation('client',c.id)}><Trash2 size={16}/></button></div></td></tr>)}
           {!visibleClients.length&&<tr><td colSpan={5}><div className="empty"><Users/><strong>Nenhum cliente encontrado</strong><p>Cadastre ou ajuste sua pesquisa.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='obligations'&&<section className="panel table-panel"><div className="table-toolbar">
@@ -1112,6 +1137,41 @@ export default function App() {
             <button type="submit" className="btn primary" disabled={passwordSetupBusy}>{passwordSetupBusy?'Salvando…':'Salvar minha senha'}</button>
           </div>
         </form>
+      </div>
+    </div>}
+    {historyClient&&<div className="modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setHistoryClientId(null);}}>
+      <div className="modal client-history-modal" role="dialog" aria-modal="true" aria-labelledby="history-title">
+        <div className="modal-head"><div><p className="eyebrow">CRM FINANCEIRO · CLIENTE</p>
+          <h2 id="history-title">Histórico de {historyClient.name}</h2>
+          <p className="subtle">{historyClient.company||'Pessoa física'} · Valores das cobranças com vencimento no período selecionado</p>
+        </div><button className="icon-button" aria-label="Fechar histórico" onClick={()=>setHistoryClientId(null)}><X size={21}/></button></div>
+        <div className="client-history-body">
+          <div className="client-history-controls"><label htmlFor="history-year">Período</label>
+            <select id="history-year" value={historyYear} onChange={e=>{setHistoryYear(e.target.value);setHistoryPage(0);}}>
+              <option value="all">Todos os anos</option>{historyYears.map(year=><option key={year} value={year}>{year}</option>)}
+            </select><span>{historyFiltered.length} cobrança(s) cadastrada(s)</span>
+          </div>
+          <div className="client-history-metrics">
+            <div><small>Total cobrado</small><strong>{money(historyStats.total)}</strong><span>{historyStats.totalCount} cobrança(s) não cancelada(s)</span></div>
+            <div><small>Recebido (marcado pago)</small><strong>{money(historyStats.received)}</strong><span>{historyStats.paidCount} cobrança(s) paga(s)</span></div>
+            <div><small>Saldo pendente</small><strong>{money(historyStats.pending)}</strong><span>Inclui programadas e vencidas</span></div>
+            <div><small>Programado</small><strong>{money(historyStats.scheduled)}</strong><span>Vencimento futuro</span></div>
+          </div>
+          <p className="client-history-info">Vencidas e não pagas: <strong>{money(historyStats.overdue)}</strong>. As programadas já estão incluídas no saldo pendente. Cobranças canceladas não entram na somatória.</p>
+          {historyStats.unpriced>0&&<p className="field-hint">{historyStats.unpriced} cobrança(s) sem valor informado não entram nas somas.</p>}
+          <div className="table-wrap"><table><thead><tr><th>COBRANÇA</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>PDF</th></tr></thead><tbody>
+            {historyVisible.map(o=><tr key={o.id}><td><strong>{o.title}</strong></td><td>{formatDate(o.due_date)}</td>
+              <td>{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
+              <td>{o.status==='pending'?<button className="btn tiny soft" disabled={loading||o.amount===null}
+                  onClick={()=>void downloadCharge(o)}><FileText size={14}/>{storedPdfIds.has(o.id)?'Visualizar':'Gerar PDF'}</button>
+                :<span className="subtle">{storedPdfIds.has(o.id)?'PDF arquivado':'—'}</span>}</td></tr>)}
+            {!historyVisible.length&&<tr><td colSpan={5}>Nenhuma cobrança encontrada para este período.</td></tr>}
+          </tbody></table></div>
+          <div className="client-history-pagination"><span>Página {historyPage+1} de {historyPages}</span>
+            <div><button className="btn soft" disabled={historyPage===0} onClick={()=>setHistoryPage(p=>Math.max(0,p-1))}>Anterior</button>
+            <button className="btn soft" disabled={historyPage+1>=historyPages} onClick={()=>setHistoryPage(p=>p+1)}>Próxima</button></div>
+          </div>
+        </div>
       </div>
     </div>}
     {deleteTarget&&<div className="modal-overlay"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title">
