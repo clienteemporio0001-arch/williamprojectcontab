@@ -41,3 +41,10 @@
 - Ações nunca são executadas ao abrir uma tela. Usam confirmação do usuário, sem agendamentos adicionais ou leituras automáticas de PDFs. Os KPIs do CRM recalculam dos dados em memória, sem consultas extras.
 - Apagar registros dentro do ContabFlow não apaga mensagens já entregues por WhatsApp/e-mail, downloads feitos por destinatários nem backups ou informações que devam ser legalmente retidas fora das tabelas operacionais.
 
+## Logo personalizada por escritório (economia de Storage)
+- `organizations.logo_path` e `logo_updated_at` são metadados leves, já lidos com o escritório; não guardam imagens na tabela.
+- O bucket `office-logos` é privado. O proprietário do escritório pode gravar, substituir e remover `org_id/logo.png`; os membros podem somente visualizar a imagem. Não existe URL pública da logo.
+- O navegador converte PNG/JPG/WebP em um único PNG de até **80 KiB** e largura/altura máxima **500 px** antes do upload. Não são usadas transformações pagas do Supabase nem Edge Functions adicionais para isso.
+- No painel, o PNG é baixado somente quando o escritório/versão muda; a URL local temporária é liberada na troca de sessão.
+- `ensureChargeDocument` consulta a logo **somente se o PDF ainda não existe**. A imagem é incorporada ao PDF na primeira emissão, preservando os documentos já existentes. Uma troca de logo não reescreve cobranças antigas.
+- A mesma lógica está no código de `generate-charge` e `dispatch-reminders`. A implantação do worker de lembretes permanece condicionada ao processo separado de ativação segura dos envios, não é ligada automaticamente.
