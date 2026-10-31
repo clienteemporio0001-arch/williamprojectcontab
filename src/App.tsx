@@ -4,7 +4,7 @@ import {
   BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp,
   ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle, Mail,
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
-  Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff, LockKeyhole, Trash2
+  Sparkles, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff, LockKeyhole, Trash2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
