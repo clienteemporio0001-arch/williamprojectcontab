@@ -20,7 +20,6 @@ type MetaSdk={
 declare global{interface Window{FB?:MetaSdk;}}
 const appId=import.meta.env.VITE_META_APP_ID||'';
 const configId=import.meta.env.VITE_META_CONFIG_ID||'';
-const META_REDIRECT_URI='https://clienteemporio0001-arch.github.io/williamprojectcontab/';
 const MAX_SIGNUP_MS=180_000;
 const ALLOWED_META_EVENTS=new Set([
   'FINISH','FINISH_ONLY_WABA','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
@@ -46,7 +45,7 @@ export default function WhatsAppConnectionPanel({
   orgId:string|null;
   onStatusChange?:(connected:boolean)=>void;
 }){
-  const [,setSdkReady]=useState(false);
+  const [sdkReady,setSdkReady]=useState(false);
   const [serverReady,setServerReady]=useState<boolean|null>(null);
   const [busy,setBusy]=useState(false);
   const [progress,setProgress]=useState('');
@@ -196,10 +195,6 @@ export default function WhatsAppConnectionPanel({
       if(!ALLOWED_META_EVENTS.has(String(data.event)))return;
       const waba=String(data.data?.waba_id||'');
       const phone=String(data.data?.phone_number_id||'');
-      if(!waba){
-        stopFlow('A Meta não informou a conta WhatsApp (WABA). Abra novamente e escolha Editar configurações para selecionar a empresa e o número.');
-        return;
-      }
       clearSessionTimer();
       info.current={...info.current,waba,phone};
       setProgress(info.current.code?
@@ -213,34 +208,57 @@ export default function WhatsAppConnectionPanel({
 
   function connect(){
     if(!appId||!configId||busy||!orgId)return;
-    const state='cfwa_'+crypto.randomUUID();
-    const oauth=new URL('https://www.facebook.com/v26.0/dialog/oauth');
-    oauth.searchParams.set('client_id',appId);
-    oauth.searchParams.set('config_id',configId);
-    oauth.searchParams.set('redirect_uri',META_REDIRECT_URI);
-    oauth.searchParams.set('response_type','code');
-    oauth.searchParams.set('state',state);
-    if(existingBusinessApp){
-      oauth.searchParams.set('extras',JSON.stringify({setup:{},featureType:'whatsapp_business_app_onboarding'}));
+    if(!window.FB||!sdkReady){
+      setError('O SDK oficial da Meta ainda não carregou. Atualize a página e confira se o navegador está bloqueando o Facebook.');
+      return;
     }
-    // A janela deve abrir diretamente pelo clique, para não ser bloqueada pelo navegador.
-    const popup=window.open('about:blank','contabflow-meta-signup','popup=yes,width=610,height=760');
-    if(!popup){setError('O navegador bloqueou a janela. Permita pop-ups para o ContabFlow e tente novamente.');return;}
     flowId.current+=1;
     const activeFlow=flowId.current;
-    manualOAuthState.current=state;
+    manualOAuthState.current='';
     info.current={};
     submitting.current=false;
     setError('');
     setBusy(true);
-    setProgress('Conclua a autorização na janela da Meta. A URL de retorno será a mesma usada na troca do código.');
+    setProgress('Conclua o cadastro WhatsApp na janela oficial da Meta, selecionando o portfólio e o número.');
     clearTimer();
     clearSessionTimer();
     timer.current=setTimeout(()=>{
       if(activeFlow!==flowId.current)return;
       stopFlow('O prazo de autorização terminou. Feche a janela da Meta e tente novamente.');
     },MAX_SIGNUP_MS);
-    popup.location.href=oauth.toString();
+    // Embedded Signup v4 precisa do Facebook Login for Business iniciado via JS SDK.
+    // Código OAuth e evento FINISH chegam por canais distintos.
+    try{
+      window.FB.login(response=>{
+        if(activeFlow!==flowId.current)return;
+        const code=String(response.authResponse?.code||response.code||'');
+        if(!code){
+          stopFlow('A Meta não retornou o código de autorização. Escolha Editar configurações e conclua o cadastro do WhatsApp Business.');
+          return;
+        }
+        info.current={...info.current,code};
+        setProgress(info.current.waba
+          ?'Conta WhatsApp e autorização recebidas. Finalizando vínculo...'
+          :'Autorização recebida. Confirmando a conta WhatsApp Business...');
+        // Aguarda brevemente o evento FINISH para priorizar o WABA exato;
+        // o servidor possui fallback seguro se a Meta não enviar o evento.
+        clearSessionTimer();
+        sessionTimer.current=setTimeout(()=>{
+          if(activeFlow===flowId.current)void attemptComplete();
+        },1200);
+      },{
+        config_id:configId,
+        auth_type:'rerequest',
+        response_type:'code',
+        override_default_response_type:true,
+        extras:{
+          setup:{},
+          ...(existingBusinessApp?{featureType:'whatsapp_business_app_onboarding'}:{})
+        }
+      });
+    }catch(e){
+      stopFlow('Não foi possível iniciar o cadastro da Meta. Confira se Entrar com o SDK do JavaScript está habilitado.');
+    }
   }
 
   async function checkTestDelivery(){
@@ -327,13 +345,14 @@ export default function WhatsAppConnectionPanel({
       </div>
     </div>:<p className="subtle small">Nenhum WhatsApp conectado a este escritório.</p>}
     {!configured&&<p className="subtle small">O Admin Master deve cadastrar o App ID e Configuration ID na publicação GitHub Pages. A Meta também exige autorização para conectar números de outros escritórios.</p>}
+    {configured&&!sdkReady&&<p className="subtle small" role="status">Carregando conexão oficial da Meta. Se não habilitar, confira bloqueadores do Facebook no navegador.</p>}
     <label className="check-card">
       <input type="checkbox" checked={existingBusinessApp} onChange={e=>setExistingBusinessApp(e.target.checked)} disabled={busy}/>
       <span><strong>Este número já usa o aplicativo WhatsApp Business</strong>
         <small>Tentar coexistência quando permitida pela Meta. Não exclua a conta do aplicativo.</small>
       </span>
     </label>
-    <button type="button" className="btn primary" onClick={connect} disabled={!configured||busy||!orgId||serverReady===false}>
+    <button type="button" className="btn primary" onClick={connect} disabled={!configured||!sdkReady||busy||!orgId||serverReady===false}>
       {busy?<Loader2 size={16}/>:<MessageCircle size={16}/>}
       {busy?'Conectando com a Meta...':status?'Reconectar meu WhatsApp Business':'Conectar meu WhatsApp Business'}
     </button>
