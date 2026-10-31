@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
-  BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp,
+  BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp,
   ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle, Mail,
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
   Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff, LockKeyhole, Trash2
@@ -47,6 +47,11 @@ const blankObligation = (clientId=''):ObligationDraft => ({
   client_id:clientId,title:'Honorários contábeis',amount:null,due_date:dateISO(7),
   status:'pending',document_url:null,recurring:true,series_id:null,due_day:null,reminder_offsets:[7,3,1,0]
 });
+function shiftMonth(yyyyMm:string,offset:number){
+  const [year,month]=yyyyMm.split('-').map(Number);
+  const date=new Date(Date.UTC(year,month-1+offset,1,12));
+  return date.toISOString().slice(0,7);
+}
 const eventLabel = (days:number) => days < 0 ? Math.abs(days)+' dia(s) em atraso' :
   days === 0 ? 'Vence hoje' : days === 1 ? 'Vence amanhã' : 'Em '+days+' dias';
 function statusFor(item:Obligation) {
@@ -66,6 +71,7 @@ export default function App() {
   const [upgradeOpen,setUpgradeOpen] = useState(false);
   const [search,setSearch] = useState('');
   const [filter,setFilter] = useState('all');
+  const [monthOffset,setMonthOffset] = useState(0);
   const [clients,setClients] = useState<Client[]>(() => demo?readDemo('contabflow_clients_v1',demoClients):[]);
   const [obligations,setObligations] = useState<Obligation[]>(() => demo?readDemo('contabflow_obligations_v1',demoObligations):[]);
   const [storedPdfIds,setStoredPdfIds] = useState<Set<string>>(()=>new Set());
@@ -343,6 +349,33 @@ export default function App() {
     }
     setSaving(false);closeModal();notify(clientDraft.id?'Cliente atualizado.':'Cliente cadastrado.');setPage('clients');
   }
+  async function deleteClient(client:Client){
+    if(loading)return;
+    if(!window.confirm('Você tem certeza de que deseja excluir o cliente "'+client.name+'"? Essa ação não poderá ser desfeita.'))return;
+    // Manter o histórico financeiro de clientes que já têm cobranças.
+    if(obligations.some(o=>o.client_id===client.id)){
+      setError('Este cliente possui cobranças vinculadas. Para preservar o histórico, edite o cliente e desative a opção Cliente ativo.');return;
+    }
+    if(demo){
+      setClients(prev=>prev.filter(c=>c.id!==client.id));
+      notify('Cliente excluído.');
+      return;
+    }
+    if(!supabase||!workspace)return;
+    setLoading(true);setError('');
+    try{
+      const {data,error:e}=await supabase.from('clients').delete()
+        .eq('id',client.id).eq('org_id',workspace.id).select('id');
+      if(e)throw new Error(e.code==='23503'
+        ?'Este cliente possui registros vinculados e não pode ser excluído. Desative o cliente para preservar o histórico.'
+        :e.message);
+      if(!data?.length)throw new Error('A exclusão não foi confirmada pelo banco. Confira suas permissões e tente novamente.');
+      setClients(prev=>prev.filter(c=>c.id!==client.id));
+      notify('Cliente excluído com sucesso.');
+    }catch(e){setError('Não foi possível excluir o cliente: '+(e instanceof Error?e.message:String(e)));}
+    finally{setLoading(false);}
+  }
+
   async function saveObligation(e:FormEvent) {
     e.preventDefault();
     if(!demo&&workspace?.billing_status==='trialing'&&!obligationDraft.id&&obligations.length>=3){
@@ -577,7 +610,33 @@ export default function App() {
   const pending=obligations.filter(o=>o.status==='pending');
   const upcoming=pending.filter(o=>daysUntil(o.due_date)>=0&&daysUntil(o.due_date)<=7);
   const overdue=pending.filter(o=>daysUntil(o.due_date)<0);
-  const paid=obligations.filter(o=>o.status==='paid');
+  // Indicadores por mês de VENCIMENTO, sem novas queries ao Supabase.
+  // 'Recebido' indica cobrança marcada manualmente como paga, não conciliação bancária.
+  const billingMonth=shiftMonth(dateISO().slice(0,7),monthOffset);
+  const monthLabel=new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'})
+    .format(new Date(billingMonth+'-01T12:00:00Z'));
+  const monthlyStats=useMemo(()=>{
+    const today=dateISO();
+    const monthItems=obligations.filter(o=>o.due_date.startsWith(billingMonth+'-')&&o.status!=='cancelled');
+    const total=monthItems.reduce((sum,o)=>sum+(o.amount??0),0);
+    const received=monthItems.filter(o=>o.status==='paid').reduce((sum,o)=>sum+(o.amount??0),0);
+    const pendingItems=monthItems.filter(o=>o.status==='pending');
+    const remaining=pendingItems.reduce((sum,o)=>sum+(o.amount??0),0);
+    const pastDue=pendingItems.filter(o=>o.due_date<today);
+    const overdueAmount=pastDue.reduce((sum,o)=>sum+(o.amount??0),0);
+    const pastMonthsBalance=obligations
+      .filter(o=>o.status==='pending'&&o.due_date<billingMonth+'-01'&&o.due_date<today)
+      .reduce((sum,o)=>sum+(o.amount??0),0);
+    return {
+      total,received,remaining,overdueAmount,pastMonthsBalance,
+      count:monthItems.length,
+      receivedCount:monthItems.filter(o=>o.status==='paid').length,
+      pendingCount:pendingItems.length,
+      overdueCount:pastDue.length,
+      noAmount:monthItems.filter(o=>o.amount===null).length,
+      progress:total>0?Math.min(100,Math.max(0,received/total*100)):0
+    };
+  },[obligations,billingMonth,nowTick]);
   const clientById=(id:string)=>clients.find(c=>c.id===id);
   const ordered=useMemo(()=>[...obligations].sort((a,b)=>a.due_date.localeCompare(b.due_date)),[obligations]);
   const visibleObligations=ordered.filter(o=>{
@@ -686,7 +745,7 @@ export default function App() {
         {(toast||error)&&<div className={'notice '+(error?'danger':'ok')}><span>{error||toast}</span><button onClick={()=>{setToast('');setError('');}} aria-label="Dispensar"><X size={16}/></button></div>}
         {loading&&<div className="loadingbar"/>}
         <div className="page-header"><div><p className="eyebrow">SUA OPERAÇÃO, SOB CONTROLE</p><h1>{title}</h1>
-          <p className="page-intro">{page==='overview'?'Acompanhe seus clientes e vencimentos sem perder nenhum prazo.':
+          <p className="page-intro">{page==='overview'?'Controle seus valores a receber, recebimentos registrados e vencimentos por mês.':
             page==='clients'?'Organize sua carteira de clientes e suas autorizações de contato.':
             page==='obligations'?'Gere PDFs individuais de cobrança com valor, vencimento e dados do cliente.':
             page==='automations'?'Configure seu fluxo de lembretes e acompanhe as notificações.':
@@ -733,12 +792,38 @@ export default function App() {
           </div>}
         </section>}
         {page==='overview'&&<>
-          <div className="metric-grid">
-            <div className="metric-card"><span className="metric-head">Clientes ativos <Users size={19}/></span><strong>{clients.filter(c=>c.active).length}</strong><span className="metric-foot"><span className="small-green"><TrendingUp size={14}/></span>Na sua carteira</span></div>
-            <div className="metric-card"><span className="metric-head">Próximos 7 dias <CalendarClock size={19}/></span><strong>{upcoming.length}</strong><span className="metric-foot">Vencimentos a acompanhar</span></div>
-            <div className="metric-card"><span className="metric-head">Em atraso <AlertTriangle size={19}/></span><strong className="text-danger">{overdue.length}</strong><span className="metric-foot">Precisam de atenção</span></div>
-            <div className="metric-card"><span className="metric-head">Pagamentos registrados <CheckCircle2 size={19}/></span><strong>{paid.length}</strong><span className="metric-foot">Marcados como pagos</span></div>
-          </div>
+          <section className="crm-finance" aria-label="Resumo financeiro mensal">
+            <div className="crm-finance-header">
+              <div><span className="crm-kicker">PAINEL FINANCEIRO</span><h2>Resumo de cobranças</h2>
+                <p>Valores agrupados pelo mês de vencimento. Pagos são os marcados manualmente como recebidos.</p></div>
+              <div className="crm-month-picker" aria-label="Selecionar mês do resumo">
+                <button type="button" aria-label="Mês anterior" onClick={()=>setMonthOffset(v=>v-1)}><ChevronLeft size={17}/></button>
+                <strong>{monthLabel}</strong>
+                <button type="button" aria-label="Próximo mês" onClick={()=>setMonthOffset(v=>v+1)}><ChevronRight size={17}/></button>
+                {monthOffset!==0&&<button type="button" className="crm-current" onClick={()=>setMonthOffset(0)}>Mês atual</button>}
+              </div>
+            </div>
+            <div className="crm-metric-grid">
+              <div className="crm-metric-card"><span>Previsto para receber <Wallet size={17}/></span>
+                <strong>{money(monthlyStats.total)}</strong><small>{monthlyStats.count} cobrança(s) com vencimento no mês</small></div>
+              <div className="crm-metric-card crm-metric-paid"><span>Marcado como recebido <CheckCircle2 size={17}/></span>
+                <strong>{money(monthlyStats.received)}</strong><small>{monthlyStats.receivedCount} cobrança(s) quitada(s)</small></div>
+              <div className="crm-metric-card"><span>Falta receber <CalendarClock size={17}/></span>
+                <strong>{money(monthlyStats.remaining)}</strong><small>{monthlyStats.pendingCount} cobrança(s) pendente(s)</small></div>
+              <div className="crm-metric-card crm-metric-overdue"><span>Vencido e não pago <AlertTriangle size={17}/></span>
+                <strong>{money(monthlyStats.overdueAmount)}</strong><small>{monthlyStats.overdueCount} vencimento(s) em atraso neste mês</small></div>
+            </div>
+            <div className="crm-finance-foot">
+              <div className="crm-progress"><div className="crm-progress-label"><span>Quitação das cobranças deste mês</span><strong>{Math.round(monthlyStats.progress)}%</strong></div>
+                <progress max={100} value={monthlyStats.progress} aria-label="Percentual quitado do mês"/></div>
+              <div className="crm-mini-counts"><span><Users size={15}/> {clients.filter(c=>c.active).length} clientes ativos</span>
+                <span><CalendarClock size={15}/> {upcoming.length} vencimentos nos próximos 7 dias</span>
+                <span><AlertTriangle size={15}/> {overdue.length} cobranças vencidas na carteira</span></div>
+            </div>
+            {(monthlyStats.noAmount>0||monthlyStats.pastMonthsBalance>0)&&
+              <p className="crm-note">{monthlyStats.noAmount>0?monthlyStats.noAmount+' cobrança(s) sem valor informado não entram nas somas. ':''}
+                {monthlyStats.pastMonthsBalance>0?'Saldo pendente vencido de meses anteriores ao selecionado: '+money(monthlyStats.pastMonthsBalance)+'.':''}</p>}
+          </section>
           <div className="overview-layout">
             <section className="panel"><div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Acompanhe o que precisa de atenção</p></div><button className="subtle-action" onClick={()=>setPage('obligations')}>Ver todos <ArrowUpRight size={16}/></button></div>
               <div className="schedule-list">{nextFive.length?nextFive.map(item=><div className="schedule-row" key={item.id}><div className="doc-icon"><FileText size={19}/></div>
@@ -760,7 +845,7 @@ export default function App() {
           <div className="table-wrap"><table><thead><tr><th>CLIENTE / EMPRESA</th><th>WHATSAPP</th><th>AUTORIZAÇÃO</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleClients.map(c=><tr key={c.id}><td><div className="person"><span className="person-avatar">{c.name[0]?.toUpperCase()}</span><div><strong>{c.name}</strong><span>{c.company||'Pessoa física'}</span></div></div></td><td>{c.phone}</td>
             <td><span className={'status '+(c.opt_in?'paid':'neutral')}>{c.opt_in?'Autorizado':'Sem autorização'}</span></td><td><span className={'status '+(c.active?'neutral':'muted')}>{c.active?'Ativo':'Inativo'}</span></td>
-            <td><div className="actions"><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button></div></td></tr>)}
+            <td><div className="actions"><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button><button className="icon-button" title="Excluir cliente" aria-label={'Excluir cliente '+c.name} disabled={loading} onClick={()=>void deleteClient(c)}><Trash2 size={16}/></button></div></td></tr>)}
           {!visibleClients.length&&<tr><td colSpan={5}><div className="empty"><Users/><strong>Nenhum cliente encontrado</strong><p>Cadastre ou ajuste sua pesquisa.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='obligations'&&<section className="panel table-panel"><div className="table-toolbar">
