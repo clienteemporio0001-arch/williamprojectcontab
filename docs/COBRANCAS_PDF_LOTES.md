@@ -31,3 +31,13 @@
 - `failed` guarda o erro de uma tentativa no provedor; requer análise antes de novo disparo. O sistema prefere evitar uma duplicidade a repetir uma cobrança em estado incerto.
 - A rotina respeita um teto por execução; para grandes volumes com muitos escritórios simultâneos será necessário evoluir para uma fila persistente, paginação de escritórios, métricas de backlog e limites de taxa por provedor.
 - O bloqueio `DISPATCH_LIVE_ENABLED` continua obrigatório, independente do agendamento.
+
+## Exclusão definitiva solicitada pelo responsável do escritório
+- **Excluir PDF** (correção de cobrança): permanece restrito a documentos de cobranças pendentes, sem histórico de disparo. A cobrança continua cadastrada.
+- **Excluir cobrança**: operação diferente e irreversível, disponível na lista de Cobranças mesmo quando a cobrança está marcada como paga. Remove a cobrança, seu PDF privado (Storage API), histórico de notificações e eventos internos vinculados; o cliente continua na carteira.
+- **Excluir cliente**: com confirmação explícita, remove o cliente e todas as cobranças vinculadas (incluindo PDFs privados, status de pagamento e histórico de lembretes) do escritório.
+- Operações usam `delete-office-record` com JWT e verificação por RLS; somente `service_role` consegue executar a transação `purge_office_record`, que revalida vínculo do usuário ao escritório. Não há concessão de DELETE de documentos ao público.
+- A remoção dos arquivos usa a Storage API **antes** da transação relacional, que elimina cliente/cobranças com FKs e apaga eventos internos vinculados. Se o Storage falhar, os registros do banco são preservados; se o banco falhar, o usuário pode repetir a exclusão após avaliar a mensagem, pois não se considera concluída antes da transação.
+- Ações nunca são executadas ao abrir uma tela. Usam confirmação do usuário, sem agendamentos adicionais ou leituras automáticas de PDFs. Os KPIs do CRM recalculam dos dados em memória, sem consultas extras.
+- Apagar registros dentro do ContabFlow não apaga mensagens já entregues por WhatsApp/e-mail, downloads feitos por destinatários nem backups ou informações que devam ser legalmente retidas fora das tabelas operacionais.
+
