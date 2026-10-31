@@ -13,6 +13,7 @@ import ProspectWelcome from './ProspectWelcome';
 import UpgradePlansModal,{type UpgradePlan} from './UpgradePlansModal';
 import WhatsAppSupport from './WhatsAppSupport';
 import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
+import {compressOfficeLogo} from './lib/office-logo';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
 import {leadWorkspaceName,normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
 import {
@@ -23,7 +24,7 @@ import {
 
 type Page = 'overview' | 'clients' | 'obligations' | 'automations' | 'settings' | 'whatsapp';
 type SignupPlan={code:string;name:string;client_limit:number;monthly_price_brl:number};
-type Workspace = {id:string;name:string;plan_code?:string;email_reminders_enabled?:boolean;whatsapp_reminders_enabled?:boolean;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
+type Workspace = {id:string;name:string;logo_path?:string|null;logo_updated_at?:string|null;plan_code?:string;email_reminders_enabled?:boolean;whatsapp_reminders_enabled?:boolean;message_template:string;tax_id:string;pix_key:string;billing_contact:string;access_status?:'active'|'suspended';billing_status?:'active'|'trialing'|'pending';trial_ends_at?:string|null;trial_started_at?:string|null};
 type ClientDraft = Omit<Client, 'id'> & { id?: string };
 type ObligationDraft = Omit<Obligation, 'id'> & { id?: string };
 
@@ -87,6 +88,8 @@ export default function App() {
   const [session,setSession] = useState<Session|null>(null);
   const [checkingAuth,setCheckingAuth] = useState(!demo);
   const [workspace,setWorkspace] = useState<Workspace|null>(null);
+  const [officeLogoUrl,setOfficeLogoUrl] = useState<string|null>(null);
+  const [logoBusy,setLogoBusy] = useState(false);
   const [workspaceChecking,setWorkspaceChecking] = useState(!demo);
   const [passwordSetupOpen,setPasswordSetupOpen] = useState(false);
   const [newPassword,setNewPassword] = useState('');
@@ -114,6 +117,24 @@ export default function App() {
   const [toast,setToast] = useState('');
   const [error,setError] = useState('');
   const [pdfPreview,setPdfPreview] = useState<{url:string;filename:string;obligationId:string}|null>(null);
+
+  // Carrega a logo privada uma única vez por versão/escritório, não a cada tela.
+  // URL local é liberada quando a versão muda ou o usuário sai do escritório.
+  useEffect(()=>{
+    if(!supabase||!workspace?.logo_path){setOfficeLogoUrl(null);return;}
+    const s=supabase;
+    const path=workspace.logo_path;
+    let active=true;
+    let objectUrl:string|null=null;
+    setOfficeLogoUrl(null);
+    void s.storage.from('office-logos').download(path).then(({data,error:e})=>{
+      if(!active)return;
+      if(e||!data){setOfficeLogoUrl(null);return;}
+      objectUrl=URL.createObjectURL(data);
+      setOfficeLogoUrl(objectUrl);
+    });
+    return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
+  },[workspace?.id,workspace?.logo_path,workspace?.logo_updated_at]);
 
   useEffect(()=>{
     if(!pdfPreview)return;
@@ -492,6 +513,43 @@ export default function App() {
     }
     notify(newStatus==='paid'?'Marcado como pago.':'Marcado como pendente.');
   }
+  async function uploadOfficeLogo(file:File){
+    if(!supabase||!workspace||logoBusy)return;
+    setLogoBusy(true);setError('');
+    try{
+      const optimized=await compressOfficeLogo(file);
+      const path=workspace.id+'/logo.png';
+      const {error:uploadError}=await supabase.storage.from('office-logos').upload(path,optimized,{
+        contentType:'image/png',cacheControl:'0',upsert:true
+      });
+      if(uploadError)throw new Error('Falha no armazenamento privado: '+uploadError.message);
+      const revision=new Date().toISOString();
+      const {data,error:e}=await supabase.from('organizations')
+        .update({logo_path:path,logo_updated_at:revision}).eq('id',workspace.id)
+        .select('logo_path,logo_updated_at').single();
+      if(e||!data)throw new Error('A logo foi enviada, mas não foi possível atualizar o escritório. '+(e?.message||''));
+      setWorkspace(prev=>prev?.id===workspace.id?{...prev,...data}:prev);
+      notify('Logo do escritório atualizada. Novos PDFs usarão esta imagem.');
+    }catch(e){setError('Não foi possível salvar a logo: '+(e instanceof Error?e.message:String(e)));}
+    finally{setLogoBusy(false);}
+  }
+  async function removeOfficeLogo(){
+    if(!supabase||!workspace?.logo_path||logoBusy)return;
+    if(!window.confirm('Remover a logo do escritório? Os PDFs já emitidos continuarão com a imagem anterior.'))return;
+    setLogoBusy(true);setError('');
+    try{
+      const {error:e}=await supabase.storage.from('office-logos').remove([workspace.logo_path]);
+      if(e)throw new Error(e.message);
+      const {data,error:dbError}=await supabase.from('organizations')
+        .update({logo_path:null,logo_updated_at:null}).eq('id',workspace.id)
+        .select('logo_path,logo_updated_at').single();
+      if(dbError||!data)throw new Error('Arquivo removido, mas não foi possível atualizar a configuração. '+(dbError?.message||''));
+      setWorkspace(prev=>prev?.id===workspace.id?{...prev,logo_path:null,logo_updated_at:null}:prev);
+      notify('Logo removida. Os próximos PDFs utilizarão o nome do escritório.');
+    }catch(e){setError('Não foi possível remover a logo: '+(e instanceof Error?e.message:String(e)));}
+    finally{setLogoBusy(false);}
+  }
+
   async function saveSettings(e:FormEvent) {
     e.preventDefault();
     if(supabase&&workspace) {
@@ -789,7 +847,7 @@ export default function App() {
       <nav className="nav-list">{nav.map(n=><button key={n.id} className={'nav-item '+(n.id==='whatsapp'?'nav-item-child ':'')+(page===n.id?'active':'')} onClick={()=>{setPage(n.id);setSearch('');setFilter('all');setMenuOpen(false);}}>
         <n.icon size={19} strokeWidth={1.9}/>{n.name}{page===n.id&&<span className="nav-active-dot"/>}</button>)}</nav>
       <div className="sidebar-footer">{masterStatus==='yes'&&<button className="btn soft block" style={{marginBottom:12}} onClick={()=>setMasterView(true)}><ShieldCheck size={16}/>Abrir Admin Master</button>}<div className="sidebar-note"><Sparkles size={16}/><strong>Mais tempo para seu escritório</strong><span>Automatize tarefas repetitivas e foque em seus clientes.</span></div>
-        <div className="sidebar-profile"><span className="avatar">{orgLabel.slice(0,2).toUpperCase()}</span><span className="profile-text"><strong>{orgLabel}</strong><small>{demo?'Ambiente demonstrativo':'Espaço do escritório'}</small></span>
+        <div className="sidebar-profile"><span className="avatar office-avatar">{officeLogoUrl?<img src={officeLogoUrl} alt="Logo do escritório"/>:orgLabel.slice(0,2).toUpperCase()}</span><span className="profile-text"><strong>{orgLabel}</strong><small>{demo?'Ambiente demonstrativo':'Espaço do escritório'}</small></span>
           {supabase&&<button className="icon-button" title="Sair" onClick={()=>{if(supabase)void supabase.auth.signOut();}}><LogOut size={18}/></button>}
         </div></div>
     </aside>
@@ -936,6 +994,26 @@ export default function App() {
         {page==='settings'&&<div className="settings-layout settings-layout--compact">
           <section className="panel settings-card">
             <div className="panel-heading"><div><h2><Building2 size={17}/> Identidade do escritório</h2><p>Dados exibidos nos seus documentos de cobrança.</p></div></div>
+            <div className="office-logo-settings">
+              <div className="office-logo-preview">
+                {officeLogoUrl?<img src={officeLogoUrl} alt="Logo atual do escritório"/>:<Building2 size={28}/>}
+              </div>
+              <div className="office-logo-copy">
+                <strong>Logo do seu escritório</strong>
+                <small>Aparecerá nesta área e nos novos PDFs. PNG transparente, JPG ou WebP; compactação automática para até 80 KB.</small>
+                <div className="office-logo-actions">
+                  <label className={'btn soft office-upload'+(logoBusy||demo?' office-upload-disabled':'')}>
+                    {logoBusy?'Processando imagem…':workspace?.logo_path?'Trocar logo':'Enviar logo'}
+                    <input type="file" accept="image/png,image/jpeg,image/webp"
+                      aria-label="Selecionar a logo do escritório" disabled={logoBusy||demo}
+                      onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void uploadOfficeLogo(file);}}/>
+                  </label>
+                  {workspace?.logo_path&&<button className="btn soft" type="button" disabled={logoBusy||demo}
+                    onClick={()=>void removeOfficeLogo()}><Trash2 size={14}/>Remover</button>}
+                </div>
+                <small>Uma logo por escritório, armazenada de forma privada. PDFs anteriores não são alterados.</small>
+              </div>
+            </div>
             <form onSubmit={saveSettings} className="stack gap-lg">
               <div className="settings-fields-grid">
                 <label>Nome do escritório<input required value={workspaceName} onChange={e=>setWorkspaceName(e.target.value)} maxLength={100}/></label>
