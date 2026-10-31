@@ -111,6 +111,8 @@ export default function App() {
   const [emailLoginBusy,setEmailLoginBusy] = useState(false);
   const [newWorkspace,setNewWorkspace] = useState('');
   const [modal,setModal] = useState<'client'|'obligation'|null>(null);
+  const [deleteTarget,setDeleteTarget] = useState<{kind:'client'|'obligation';id:string}|null>(null);
+  const [deletionAcknowledged,setDeletionAcknowledged] = useState(false);
   const [clientDraft,setClientDraft] = useState<ClientDraft>(blankClient());
   const [obligationDraft,setObligationDraft] = useState<ObligationDraft>(blankObligation());
   const [saving,setSaving] = useState(false);
@@ -392,13 +394,17 @@ export default function App() {
     return {chargesDeleted:Number(data.charges_deleted||0)};
   }
 
+  function openDeleteConfirmation(kind:'client'|'obligation',id:string){
+    setDeleteTarget({kind,id});setDeletionAcknowledged(false);setError('');
+  }
+  function closeDeleteConfirmation(){
+    if(loading)return;
+    setDeleteTarget(null);setDeletionAcknowledged(false);
+  }
   async function deleteClient(client:Client){
     if(loading)return;
     const linked=obligations.filter(o=>o.client_id===client.id);
-    const message='Você tem certeza de que deseja excluir DEFINITIVAMENTE o cliente "'+
-      client.name+'"?\n\nSerão removidos também '+linked.length+
-      ' cobrança(s), PDFs, registros de pagamento e histórico de lembretes vinculados.\n\nESTA AÇÃO NÃO PODE SER DESFEITA.';
-    if(!window.confirm(message))return;
+    if(!deletionAcknowledged||deleteTarget?.kind!=='client'||deleteTarget.id!==client.id)return;
     if(demo){
       const ids=new Set(linked.map(o=>o.id));
       setClients(prev=>prev.filter(c=>c.id!==client.id));
@@ -406,6 +412,7 @@ export default function App() {
       setLogs(prev=>prev.filter(log=>!ids.has(log.obligation_id)));
       setStoredPdfIds(prev=>new Set([...prev].filter(id=>!ids.has(id))));
       if(pdfPreview&&ids.has(pdfPreview.obligationId))setPdfPreview(null);
+      setDeleteTarget(null);setDeletionAcknowledged(false);
       notify('Cliente e '+linked.length+' cobrança(s) excluídos.');
       return;
     }
@@ -418,6 +425,7 @@ export default function App() {
       setLogs(prev=>prev.filter(log=>!ids.has(log.obligation_id)));
       setStoredPdfIds(prev=>new Set([...prev].filter(id=>!ids.has(id))));
       if(pdfPreview&&ids.has(pdfPreview.obligationId))setPdfPreview(null);
+      setDeleteTarget(null);setDeletionAcknowledged(false);
       notify('Cliente excluído definitivamente, com '+result.chargesDeleted+' cobrança(s) vinculada(s).');
     }catch(e){setError('Não foi possível excluir o cliente: '+(e instanceof Error?e.message:String(e)));}
     finally{setLoading(false);}
@@ -425,13 +433,13 @@ export default function App() {
 
   async function deleteObligation(item:Obligation){
     if(loading)return;
-    if(!window.confirm('Tem certeza de que deseja excluir DEFINITIVAMENTE a cobrança "'+item.title+
-      '" com vencimento em '+formatDate(item.due_date)+'?\n\nSerão excluídos também o PDF, registros de pagamento e histórico de envios desta cobrança. O cliente continuará cadastrado.\n\nESTA AÇÃO NÃO PODE SER DESFEITA.'))return;
+    if(!deletionAcknowledged||deleteTarget?.kind!=='obligation'||deleteTarget.id!==item.id)return;
     if(demo){
       setObligations(prev=>prev.filter(o=>o.id!==item.id));
       setLogs(prev=>prev.filter(log=>log.obligation_id!==item.id));
       setStoredPdfIds(prev=>{const ids=new Set(prev);ids.delete(item.id);return ids;});
       if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
+      setDeleteTarget(null);setDeletionAcknowledged(false);
       notify('Cobrança excluída definitivamente.');
       return;
     }
@@ -442,6 +450,7 @@ export default function App() {
       setLogs(prev=>prev.filter(log=>log.obligation_id!==item.id));
       setStoredPdfIds(prev=>{const ids=new Set(prev);ids.delete(item.id);return ids;});
       if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
+      setDeleteTarget(null);setDeletionAcknowledged(false);
       notify('Cobrança, PDF e histórico vinculados excluídos definitivamente.');
     }catch(e){setError('Não foi possível excluir a cobrança: '+(e instanceof Error?e.message:String(e)));}
     finally{setLoading(false);}
@@ -972,7 +981,7 @@ export default function App() {
           <div className="table-wrap"><table><thead><tr><th>CLIENTE / EMPRESA</th><th>WHATSAPP</th><th>AUTORIZAÇÃO</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleClients.map(c=><tr key={c.id}><td><div className="person"><span className="person-avatar">{c.name[0]?.toUpperCase()}</span><div><strong>{c.name}</strong><span>{c.company||'Pessoa física'}</span></div></div></td><td>{c.phone}</td>
             <td><span className={'status '+(c.opt_in?'paid':'neutral')}>{c.opt_in?'Autorizado':'Sem autorização'}</span></td><td><span className={'status '+(c.active?'neutral':'muted')}>{c.active?'Ativo':'Inativo'}</span></td>
-            <td><div className="actions"><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button><button className="icon-button" title="Excluir cliente" aria-label={'Excluir cliente '+c.name} disabled={loading} onClick={()=>void deleteClient(c)}><Trash2 size={16}/></button></div></td></tr>)}
+            <td><div className="actions"><button className="btn tiny soft" onClick={()=>showClient(c)}>Editar</button><button className="icon-button" title="Criar obrigação" onClick={()=>{setObligationDraft(blankObligation(c.id));setModal('obligation');}}><Plus size={17}/></button><button className="icon-button" title="Excluir cliente" aria-label={'Excluir cliente '+c.name} disabled={loading} onClick={()=>openDeleteConfirmation('client',c.id)}><Trash2 size={16}/></button></div></td></tr>)}
           {!visibleClients.length&&<tr><td colSpan={5}><div className="empty"><Users/><strong>Nenhum cliente encontrado</strong><p>Cadastre ou ajuste sua pesquisa.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='obligations'&&<section className="panel table-panel"><div className="table-toolbar">
@@ -981,7 +990,7 @@ export default function App() {
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
-            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title={storedPdfIds.has(o.id)?'Visualizar PDF emitido':'Gerar e visualizar PDF'} disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button>{storedPdfIds.has(o.id)&&o.status==='pending'&&<button className="icon-button" title="Excluir PDF não enviado e liberar correção" aria-label="Excluir PDF da cobrança" disabled={loading} onClick={()=>void deleteChargePdf(o)}><Trash2 size={16}/></button>}<button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button><button className="btn tiny soft" title="Excluir cobrança definitivamente (inclui PDF e histórico)" aria-label={'Excluir cobrança '+o.title} disabled={loading} onClick={()=>void deleteObligation(o)}><Trash2 size={14}/>Excluir</button></div></td></tr>)}
+            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title={storedPdfIds.has(o.id)?'Visualizar PDF emitido':'Gerar e visualizar PDF'} disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button>{storedPdfIds.has(o.id)&&o.status==='pending'&&<button className="icon-button" title="Excluir PDF não enviado e liberar correção" aria-label="Excluir PDF da cobrança" disabled={loading} onClick={()=>void deleteChargePdf(o)}><Trash2 size={16}/></button>}<button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button><button className="btn tiny soft" title="Excluir cobrança definitivamente (inclui PDF e histórico)" aria-label={'Excluir cobrança '+o.title} disabled={loading} onClick={()=>openDeleteConfirmation('obligation',o.id)}><Trash2 size={14}/>Excluir</button></div></td></tr>)}
           {!visibleObligations.length&&<tr><td colSpan={5}><div className="empty"><ClipboardList/><strong>Nenhuma obrigação encontrada</strong><p>Adicione uma obrigação para começar.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de cobranças</h2><p>Os dias são configurados individualmente em cada cobrança</p></div><span className="status neutral">Padrão inicial</span></div>
@@ -1105,6 +1114,15 @@ export default function App() {
         </form>
       </div>
     </div>}
+    {deleteTarget&&<div className="modal-overlay"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-delete-title">
+      <div className="modal-head"><div><p className="eyebrow">ATENÇÃO · EXCLUSÃO IRREVERSÍVEL</p><h2 id="confirm-delete-title">Excluir definitivamente?</h2></div><button type="button" className="icon-button" aria-label="Cancelar exclusão" disabled={loading} onClick={closeDeleteConfirmation}><X size={20}/></button></div>
+      <div className="modal-body stack gap-lg">
+        {deleteTarget.kind==='client'?<p>Você está prestes a excluir o cliente <strong>{clients.find(c=>c.id===deleteTarget.id)?.name||'selecionado'}</strong> e todas as suas <strong>{obligations.filter(o=>o.client_id===deleteTarget.id).length} cobranças vinculadas</strong>, inclusive PDFs armazenados, status de pagamento e histórico de lembretes.</p>:<p>Você está prestes a excluir a cobrança <strong>{obligations.find(o=>o.id===deleteTarget.id)?.title||'selecionada'}</strong>, incluindo seu PDF, status de pagamento e histórico de envios. O cliente permanecerá cadastrado.</p>}
+        <p className="form-error"><AlertTriangle size={17}/> Esta operação não pode ser desfeita. Documentos já baixados ou mensagens entregues fora do ContabFlow não serão removidos.</p>
+        <label className="check-card"><input type="checkbox" checked={deletionAcknowledged} disabled={loading} onChange={e=>setDeletionAcknowledged(e.target.checked)}/><span><strong>Estou ciente de que a exclusão é permanente.</strong><small>Confirmo que compreendo a perda dos dados e documentos vinculados.</small></span></label>
+        {error&&<p className="form-error" role="alert">{error}</p>}
+        <div className="modal-actions"><button type="button" className="btn soft" disabled={loading} onClick={closeDeleteConfirmation}>Cancelar</button><button type="button" className="btn primary" disabled={!deletionAcknowledged||loading} onClick={()=>{if(deleteTarget.kind==='client'){const client=clients.find(c=>c.id===deleteTarget.id);if(client)void deleteClient(client);}else{const item=obligations.find(o=>o.id===deleteTarget.id);if(item)void deleteObligation(item);}}}>{loading?'Excluindo…':'Excluir definitivamente'}</button></div>
+      </div></div></div>}
     {modal&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target)closeModal();}}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><p className="eyebrow">CONTABFLOW</p><h2 id="modal-title">{modal==='client'?(clientDraft.id?'Editar cliente':'Novo cliente'):(obligationDraft.id?'Editar cobrança':'Nova cobrança')}</h2></div><button className="icon-button" aria-label="Fechar" onClick={closeModal}><X size={21}/></button></div>
       {modal==='client'?<form onSubmit={saveClient} className="modal-body stack gap-lg"><div className="form-row"><label>Nome completo *<input autoFocus required value={clientDraft.name} onChange={e=>setClientDraft({...clientDraft,name:e.target.value})} placeholder="Ex.: Maria Silva"/></label><label>Empresa<input value={clientDraft.company} onChange={e=>setClientDraft({...clientDraft,company:e.target.value})} placeholder="Razão social ou fantasia"/></label></div>
