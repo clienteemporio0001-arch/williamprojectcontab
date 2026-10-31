@@ -345,7 +345,10 @@ export default function App() {
     if(demo) setClients(prev=>clientDraft.id?prev.map(x=>x.id===payload.id?payload:x):[payload,...prev]);
     else if(supabase && workspace) {
       const {error:e}=await supabase.from('clients').upsert({...payload,org_id:workspace.id});
-      if(e){setError(e.message);setSaving(false);return;} await loadCloud(workspace.id);
+      if(e){setError(e.message);setSaving(false);return;}
+      // Não recarregar quatro tabelas para cadastrar ou editar um único cliente.
+      setClients(prev=>clientDraft.id
+        ?prev.map(x=>x.id===payload.id?{...x,...payload}:x):[payload,...prev]);
     }
     setSaving(false);closeModal();notify(clientDraft.id?'Cliente atualizado.':'Cliente cadastrado.');setPage('clients');
   }
@@ -388,14 +391,26 @@ export default function App() {
       setError('O link do documento deve começar com https://');return;
     }
     const base=obligations.find(o=>o.id===obligationDraft.id);
-    if(!demo&&base&&storedPdfIds.has(base.id)&&(
+    const pdfAffectsChange=!!base&&(
       base.client_id!==obligationDraft.client_id||base.title!==obligationDraft.title.trim()||
       base.amount!==obligationDraft.amount||base.due_date!==obligationDraft.due_date
-    )){
-      setError('Já existe um PDF emitido. Para corrigir cliente, descrição, valor ou vencimento, use Excluir PDF na lista de cobranças antes de salvar.');
-      return;
-    }
+    );
+    const replaceExistingPdf=!demo&&!!base&&storedPdfIds.has(base.id)&&pdfAffectsChange;
+    if(replaceExistingPdf&&!window.confirm(
+      'Já existe um PDF emitido para esta cobrança. Deseja excluir o PDF anterior e salvar os dados corrigidos? Se houver histórico de envio, a operação será bloqueada.'
+    ))return;
     setSaving(true);setError('');
+    if(replaceExistingPdf&&supabase&&base){
+      try{
+        await requestDeletePdf(base.id);
+        setStoredPdfIds(prev=>{const next=new Set(prev);next.delete(base.id);return next;});
+        if(pdfPreview?.obligationId===base.id)setPdfPreview(null);
+      }catch(e){
+        setError('Não foi possível substituir o PDF: '+(e instanceof Error?e.message:String(e)));
+        setSaving(false);
+        return;
+      }
+    }
     const payload:Obligation = {
       id:obligationDraft.id||crypto.randomUUID(),
       client_id:obligationDraft.client_id, title:obligationDraft.title.trim(),
@@ -410,7 +425,9 @@ export default function App() {
     if(demo)setObligations(prev=>obligationDraft.id?prev.map(x=>x.id===payload.id?payload:x):[payload,...prev]);
     else if(supabase && workspace){
       const {error:e}=await supabase.from('obligations').upsert({...payload,org_id:workspace.id});
-      if(e){setError(e.message);setSaving(false);return;}
+      if(e){setError(e.code==='23514'
+        ?'Esta cobrança possui histórico de envio ou PDF emitido. Não é possível alterar os dados sem preservar o documento original.'
+        :e.message);setSaving(false);return;}
       // O banco confirmou a gravação: atualizar somente a linha alterada,
       // sem refazer consultas de clientes, cobranças, PDFs e histórico.
       setObligations(prev=>obligationDraft.id
@@ -574,23 +591,28 @@ export default function App() {
     }catch(err){setError('Não foi possível gerar a cobrança: '+String(err));}
     finally{setLoading(false);}
   }
+  async function requestDeletePdf(obligationId:string):Promise<{deleted:boolean}>{
+    if(!supabase)throw Error('Supabase não conectado.');
+    const {data,error:e}=await supabase.functions.invoke('generate-charge',{
+      body:{obligation_id:obligationId,action:'delete'}
+    });
+    if(e||data?.error){
+      let detail=typeof data?.error==='string'?data.error:e?.message||'Falha ao excluir PDF.';
+      const context=(e as {context?:unknown}|null)?.context;
+      if(context instanceof Response){
+        try{const result=await context.clone().json() as {error?:string};if(result.error)detail=result.error;}
+        catch{ /* resposta indisponível */ }
+      }
+      throw new Error(detail);
+    }
+    return {deleted:data?.deleted===true};
+  }
   async function deleteChargePdf(item:Obligation){
     if(!supabase||!workspace||item.status!=='pending'||loading)return;
     if(!window.confirm('Excluir o PDF desta cobrança? O arquivo será removido do Supabase Storage. Depois, edite a data ou valor e gere um novo PDF. Esta ação não é permitida se houver histórico de envio.'))return;
     setLoading(true);setError('');
     try{
-      const {data,error:e}=await supabase.functions.invoke('generate-charge',{
-        body:{obligation_id:item.id,action:'delete'}
-      });
-      if(e||data?.error){
-        let detail=typeof data?.error==='string'?data.error:e?.message||'Falha ao excluir PDF.';
-        const context=(e as {context?:unknown}|null)?.context;
-        if(context instanceof Response){
-          try{const result=await context.clone().json() as {error?:string};if(result.error)detail=result.error;}
-          catch{ /* resposta indisponível */ }
-        }
-        throw new Error(detail);
-      }
+      const data=await requestDeletePdf(item.id);
       setStoredPdfIds(prev=>{const next=new Set(prev);next.delete(item.id);return next;});
       if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
       notify(data?.deleted
@@ -978,7 +1000,7 @@ export default function App() {
         <form onSubmit={saveObligation} className="modal-body stack gap-lg"><label>Cliente *<select required value={obligationDraft.client_id} onChange={e=>setObligationDraft({...obligationDraft,client_id:e.target.value})}><option value="">Selecione um cliente</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name} — {c.company||'PF'}</option>)}</select></label>
           <label>Descrição dos honorários *<input required value={obligationDraft.title} onChange={e=>setObligationDraft({...obligationDraft,title:e.target.value})} placeholder="Ex.: DAS — Simples Nacional"/></label>
           <div className="form-row"><label>Vencimento *<input type="date" required value={obligationDraft.due_date} onChange={e=>setObligationDraft({...obligationDraft,due_date:e.target.value})}/></label><label>Valor dos honorários *<input required type="number" min="0" step="0.01" value={obligationDraft.amount??''} onChange={e=>setObligationDraft({...obligationDraft,amount:e.target.value===''?null:Number(e.target.value)})} placeholder="0,00"/></label></div>
-          <p className="field-hint">O PDF será criado ao clicar em PDF na lista. Caso já tenha emitido um documento, exclua-o antes de mudar valor ou vencimento. Avisos com histórico de envio não podem ser excluídos.</p>
+          <p className="field-hint">O PDF é criado ao clicar em PDF. Se você corrigir valor, cliente ou vencimento, a plataforma pedirá confirmação para substituir o documento ainda não enviado. Avisos com histórico de envio permanecem protegidos.</p>
           <label className="check-card"><input type="checkbox" checked={obligationDraft.recurring} onChange={e=>setObligationDraft({...obligationDraft,recurring:e.target.checked})}/><span><strong>Repetir mensalmente</strong><small>O servidor gera uma nova competência a cada mês, sem duplicar o documento anterior. Links e valores devem ser atualizados quando necessário.</small></span></label>
           <div className="field"><label>Dias para enviar os lembretes por e-mail e WhatsApp</label>
             <p className="field-hint">A mesma régua vale para os canais autorizados e ativados no escritório. 0 = no dia. Cada canal registra seu próprio disparo.</p>
