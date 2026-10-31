@@ -44,20 +44,28 @@ export async function createChargePdf(input:ChargeInfo):Promise<Uint8Array> {
     }if(row){text(row,x,y,size);y-=18;}return y;
   };
   page.drawRectangle({x:0,y:770,width:W,height:72,color:navy});
-  // Logo incorporada somente na PRIMEIRA emissão, sem URLs externas.
-  // A caixa de 92x54 preserva a proporção e evita distorções.
-  let hasLogo=false;
+  // Identidade visual compacta: logo à esquerda e textos ao lado.
+  // Mantém a proporção sem alterar nenhuma outra seção do PDF.
+  let headerX=48;
   if(input.logoPng?.length){
     try{
       const logo=await pdf.embedPng(input.logoPng);
-      const ratio=Math.min(92/logo.width,54/logo.height,1);
-      const w=logo.width*ratio,h=logo.height*ratio;
-      page.drawImage(logo,{x:497+(92-w)/2,y:778+(54-h)/2,width:w,height:h});
-      hasLogo=true;
-    }catch{ /* Logo inválida não pode impedir a emissão da cobrança. */ }
+      const box={x:48,y:778,width:82,height:54};
+      const scale=Math.min(box.width/logo.width,box.height/logo.height);
+      const w=logo.width*scale,h=logo.height*scale;
+      page.drawImage(logo,{
+        x:box.x+(box.width-w)/2,y:box.y+(box.height-h)/2,
+        width:w,height:h
+      });
+      headerX=145;
+    }catch{ /* Uma imagem inválida não impede a emissão do documento. */ }
   }
-  text(clean(input.officeName,hasLogo?36:65).toUpperCase(),48,803,17,true,rgb(1,1,1));
-  text('COBRANCA DE HONORARIOS CONTABEIS',48,783,10,false,rgb(.66,.91,.86));
+  const headerTitle=clean(input.officeName,80).toUpperCase();
+  const availableWidth=W-headerX-48;
+  let titleSize=17;
+  while(titleSize>10&&bold.widthOfTextAtSize(headerTitle,titleSize)>availableWidth)titleSize-=.5;
+  text(headerTitle,headerX,803,titleSize,true,rgb(1,1,1));
+  text('COBRANCA DE HONORARIOS CONTABEIS',headerX,783,10,false,rgb(.66,.91,.86));
   text('AVISO DE COBRANCA',48,733,20,true);
   text('Documento de cobranca - pagamento ainda nao confirmado',48,711,10,false,muted);
   line(693);
