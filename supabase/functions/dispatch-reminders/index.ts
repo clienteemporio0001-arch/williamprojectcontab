@@ -4,7 +4,7 @@
 // Os tokens e Phone Number IDs são individuais por escritório, nunca globais.
 // Nunca inclua essas credenciais no código do navegador.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createChargePdf } from '../_shared/billing_pdf.ts';
+import { ensureChargeDocument } from '../_shared/charge_document.ts';
 
 type Org = { id:string; name:string; timezone:string;tax_id:string;pix_key:string;billing_contact:string;access_status:'active'|'suspended';billing_status:'active'|'trialing'|'pending';trial_ends_at:string|null;email_reminders_enabled:boolean;whatsapp_reminders_enabled:boolean };
 type Client = { id:string; name:string; phone:string;company?:string;tax_id?:string;email:string|null;email_opt_in:boolean;email_opt_in_at:string|null;email_consent_source:string|null;active:boolean;opt_in:boolean;opt_in_at:string|null };
@@ -14,6 +14,10 @@ type Obligation = {
   due_day:number|null; document_url:string|null; reminder_offsets:number[]|null; clients:Client|null;
 };
 
+// Cada invocação envia um lote curto; o cron chama o worker repetidamente.
+// O limite é global e não permite que um escritório monopolize a rodada.
+const MAX_PER_RUN=12;
+const MAX_PER_ORG=4;
 const cors = { 'content-type':'application/json' };
 function fail(message:string,status=500){return new Response(JSON.stringify({error:message}),{status,headers:cors});}
 function localParts(date:Date,zone:string) {
@@ -119,7 +123,9 @@ Deno.serve(async(req:Request)=>{
   if(!dryRun&&Deno.env.get('DISPATCH_LIVE_ENABLED')!=='true')
     return fail('Envios reais desativados. Configure DISPATCH_LIVE_ENABLED=true apenas depois de testar.',503);
 
-  const stats={dryRun,testNow,organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
+  const stats={dryRun,testNow,batchSize:MAX_PER_RUN,attempted:0,pdfCreated:0,pdfReused:0,pdfFailed:0,
+    organizations:0,generated:0,wouldSend:0,wouldSendEmail:0,wouldSendWhatsApp:0,
+    sent:0,sentEmail:0,sentWhatsApp:0,failed:0,skipped:0,configMissing:0};
   let orgQuery=db.from('organizations')
     .select('id,name,timezone,tax_id,pix_key,billing_contact,access_status,billing_status,trial_ends_at,email_reminders_enabled,whatsapp_reminders_enabled');
   if(testNow)orgQuery=orgQuery.eq('id',testOrg);
@@ -127,6 +133,8 @@ Deno.serve(async(req:Request)=>{
   if(orgError)return fail(orgError.message);
 
   for(const org of (orgs||[]) as Org[]) {
+    if(!dryRun&&stats.attempted>=MAX_PER_RUN)break;
+    let attemptsInOrg=0;
     // Envio oficial automatizado é reservado aos escritórios com assinatura liberada.
     // No teste grátis, o contador pode apenas preparar seus documentos e
     // usar o botão manual do WhatsApp, sem consumo de templates oficiais.
@@ -137,7 +145,7 @@ Deno.serve(async(req:Request)=>{
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
     // Agendamento: uma vez por dia, entre 9h e 10h da manhã de cada escritório.
-    if(local.hour!==9&&!dryRun&&!testNow)continue;
+    if((local.hour<9||local.hour>=11)&&!dryRun&&!testNow)continue;
     stats.organizations++;
 
     // O remetente é EXCLUSIVO deste escritório; nenhum token/número global
@@ -205,6 +213,7 @@ Deno.serve(async(req:Request)=>{
     // Canal independente: o mesmo vencimento pode gerar 1 email e 1 WhatsApp,
     // cada um com tentativa e chave única próprias.
     for(const record of due||[]){
+      if(!dryRun&&(stats.attempted>=MAX_PER_RUN||attemptsInOrg>=MAX_PER_ORG))break;
       const item=record as unknown as Obligation;
       const client=item.clients;
       if(!client?.active||item.amount===null){stats.skipped++;continue;}
@@ -215,6 +224,7 @@ Deno.serve(async(req:Request)=>{
       const filename='cobranca-'+item.due_date+'.pdf';
 
       for(const channel of ['email','whatsapp'] as const){
+        if(!dryRun&&(stats.attempted>=MAX_PER_RUN||attemptsInOrg>=MAX_PER_ORG))break;
         const isEmail=channel==='email';
         if(testNow&&isEmail)continue;
         if(isEmail){
@@ -244,33 +254,48 @@ Deno.serve(async(req:Request)=>{
           .select('status').eq('id',item.id).single();
         if(currentError||current?.status!=='pending'){stats.skipped++;continue;}
 
-        // Grava a tentativa antes de chamar o provedor; uma falha ambígua NÃO
-        // é reenviada automaticamente (evita cobrança duplicada ao cliente).
-        const {data:log,error:logError}=await db.from('reminder_logs').insert({
-          org_id:org.id,obligation_id:item.id,due_date:item.due_date,
-          offset_days:offset,channel,status:'processing'
-        }).select('id').single();
-        if(logError){stats.skipped++;continue;}
-        try{
-          if(!pdf){
-            pdf=await createChargePdf({
+        // Nunca gere PDF para um lembrete já processado. UNIQUE no banco
+        // continua sendo a proteção definitiva contra workers concorrentes.
+        const {data:previous,error:previousError}=await db.from('reminder_logs')
+          .select('id,status').eq('org_id',org.id).eq('obligation_id',item.id)
+          .eq('due_date',item.due_date).eq('offset_days',offset).eq('channel',channel).maybeSingle();
+        if(previousError){stats.failed++;continue;}
+        if(previous){stats.skipped++;continue;}
+
+        // Antes de registrar a tentativa de envio: garantir PDF único e privado.
+        // Se a geração/storage falhar, não houve chamada ao provedor: o próximo
+        // tick pode tentar novamente sem o risco de duplicar a mensagem.
+        if(!pdf){
+          try{
+            const result=await ensureChargeDocument(db,org.id,item.id,{
               officeName:org.name,officeTaxId:org.tax_id,pixKey:org.pix_key,
               billingContact:org.billing_contact,clientName:client.name,
               company:client.company||'',clientTaxId:client.tax_id||'',
               service:item.title,amount:Number(item.amount),dueDate:item.due_date
             });
-            const path=org.id+'/'+item.id+'.pdf';
-            const {error:uploadError}=await db.storage.from('billing-documents').upload(path,pdf,{
-              contentType:'application/pdf',cacheControl:'0',upsert:true
-            });
-            if(uploadError)throw uploadError;
-            const {error:documentError}=await db.from('billing_documents').upsert({
-              org_id:org.id,obligation_id:item.id,storage_path:path,
-              generated_at:new Date().toISOString()
-            },{onConflict:'obligation_id'});
-            if(documentError)throw documentError;
+            pdf=result.bytes;
+            if(result.created)stats.pdfCreated++;else stats.pdfReused++;
+          }catch(err){
+            stats.failed++;stats.pdfFailed++;
+            // Sem conteúdo pessoal e sem token na mensagem de diagnóstico.
+            console.error('PDF preparation failed for obligation',item.id,
+              err instanceof Error?err.name:'unknown error');
+            continue;
           }
-          let providerId:string;
+        }
+
+        // A tentativa é criada ANTES de acessar Meta/Resend e só é criada UMA
+        // vez por cobrança, dia relativo, data e canal. Falhas após esse ponto
+        // exigem análise: não repetir automaticamente respostas ambíguas.
+        const {data:log,error:logError}=await db.from('reminder_logs').insert({
+          org_id:org.id,obligation_id:item.id,due_date:item.due_date,
+          offset_days:offset,channel,status:'processing'
+        }).select('id').single();
+        if(logError){stats.skipped++;continue;}
+        stats.attempted++;attemptsInOrg++;
+
+        let providerId:string|null=null;
+        try{
           if(isEmail){
             const subject='Aviso de cobrança - '+item.title+' - vence em '+formatDate(item.due_date);
             const greeting=htmlSafe(client.name.split(' ')[0]||client.name);
@@ -292,13 +317,21 @@ Deno.serve(async(req:Request)=>{
           const {error:updateError}=await db.from('reminder_logs').update({
             status:'sent',provider_message_id:providerId,sent_at:new Date().toISOString()
           }).eq('id',log.id);
-          if(updateError)throw updateError;
+          if(updateError)throw Error('Falha ao registrar confirmação do provedor');
           stats.sent++;
           if(isEmail)stats.sentEmail++;else stats.sentWhatsApp++;
         }catch(err){
-          await db.from('reminder_logs').update({
-            status:'failed',error:String(err).slice(0,500)
-          }).eq('id',log.id);
+          if(providerId){
+            // Provedor já aceitou: NÃO marque failed nem reenvie automaticamente.
+            // Mantenha processing para reconciliação pelo status/webhook.
+            console.error('Provider accepted but log reconciliation failed',log.id);
+          }else{
+            const message=String(err instanceof Error?err.message:err).slice(0,400);
+            const {error:updateError}=await db.from('reminder_logs').update({
+              status:'failed',error:message
+            }).eq('id',log.id).eq('status','processing');
+            if(updateError)console.error('Reminder failure log update error',log.id);
+          }
           stats.failed++;
         }
       }
