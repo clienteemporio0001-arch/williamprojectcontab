@@ -614,3 +614,50 @@
  .pdf-preview-actions{gap:6px}
  .pdf-preview-actions .btn{padding:9px 10px;font-size:11px}
 }
+
+
+/* Visão geral: CRM financeiro mensal compacto, sem bibliotecas ou consultas adicionais. */
+.crm-finance{margin-bottom:17px;padding:17px;border:1px solid #294253;border-radius:12px;background:linear-gradient(135deg,#142837 0%,#111f31 70%);box-shadow:0 10px 28px #060e1918}
+.crm-finance-header{display:flex;align-items:center;justify-content:space-between;gap:17px;flex-wrap:wrap;margin-bottom:14px}
+.crm-kicker{display:block;color:#5cdec1;font-size:9px;font-weight:850;letter-spacing:1.4px;margin-bottom:5px}
+.crm-finance-header h2{font:800 17px Manrope,sans-serif;color:#f2fbfc;margin:0 0 5px}
+.crm-finance-header p{margin:0;color:#95b1be;font-size:10.5px;line-height:1.5}
+.crm-month-picker{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;background:#0e1c2b;border:1px solid #31485a;border-radius:9px;padding:4px}
+.crm-month-picker>button{width:32px;height:30px;display:grid;place-items:center;border:0;background:#1b3144;border-radius:6px;color:#9feadd;cursor:pointer}
+.crm-month-picker>button:hover{background:#275068;color:#fff}
+.crm-month-picker>strong{min-width:125px;text-align:center;font-size:11px;text-transform:capitalize;color:#e5f1f5}
+.crm-month-picker>button.crm-current{width:auto;padding:0 9px;font-size:10px;font-weight:750}
+.crm-metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.crm-metric-card{min-width:0;display:flex;flex-direction:column;gap:8px;padding:14px 13px;background:#102034;border:1px solid #2a3d51;border-radius:10px}
+.crm-metric-card>span{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#a9bfd2;font-size:10px;font-weight:750}
+.crm-metric-card>span svg{flex-shrink:0;color:#68d4c2}
+.crm-metric-card>strong{font:800 clamp(16px,1.55vw,23px) Manrope,sans-serif;letter-spacing:-.7px;color:#f3f9fd;white-space:nowrap}
+.crm-metric-card>small{font-size:10px;line-height:1.45;color:#87a1b7}
+.crm-metric-paid{background:#10312f;border-color:#285950}
+.crm-metric-paid>strong,.crm-metric-paid>span svg{color:#69e4c1}
+.crm-metric-overdue{background:#2c212c;border-color:#63414a}
+.crm-metric-overdue>strong,.crm-metric-overdue>span svg{color:#ffac9a}
+.crm-finance-foot{display:flex;gap:16px;justify-content:space-between;align-items:center;margin-top:13px;flex-wrap:wrap}
+.crm-progress{flex:1 1 220px;max-width:360px;display:grid;gap:7px}
+.crm-progress-label{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#a9c5d0;font-size:10px}
+.crm-progress-label strong{color:#5de0b9;font-size:12px}
+.crm-progress progress{width:100%;height:7px;appearance:none;border:0;border-radius:10px;overflow:hidden;background:#2a4052}
+.crm-progress progress::-webkit-progress-bar{background:#2a4052;border-radius:10px}
+.crm-progress progress::-webkit-progress-value{background:#47d9af;border-radius:10px}
+.crm-progress progress::-moz-progress-bar{background:#47d9af;border-radius:10px}
+.crm-mini-counts{display:flex;gap:14px;align-items:center;flex-wrap:wrap;color:#9cb6c8;font-size:10px}
+.crm-mini-counts span{display:inline-flex;align-items:center;gap:6px}
+.crm-mini-counts svg{color:#57caae}
+.crm-note{margin:12px 0 0;font-size:10px;color:#e9bd83;line-height:1.6}
+@media(max-width:1000px){.crm-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+ .crm-finance{padding:12px}
+ .crm-finance-header{align-items:stretch}
+ .crm-month-picker{align-self:flex-start}
+ .crm-metric-grid{gap:8px}
+ .crm-metric-card{padding:12px 10px;gap:8px}
+ .crm-metric-card>span{font-size:9.5px}
+ .crm-metric-card>strong{font-size:clamp(15px,4vw,20px);white-space:normal;overflow-wrap:anywhere}
+ .crm-metric-card>small{font-size:9px}
+ .crm-finance-foot{gap:11px}
+}
