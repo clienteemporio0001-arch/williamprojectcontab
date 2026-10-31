@@ -27,7 +27,7 @@ Deno.serve(async(req:Request)=>{
   if(authError||!user)return respond('Sessão inválida',401);
   // Consulta passa por RLS: um escritório não consegue ver a cobrança de outro.
   const {data:obligation,error:fetchError}=await userDB.from('obligations')
-    .select('id,org_id,title,amount,due_date,status,clients!inner(name,company,tax_id),organizations!inner(name,tax_id,pix_key,billing_contact)')
+    .select('id,org_id,title,amount,due_date,status,clients!inner(name,company,tax_id),organizations!inner(name,tax_id,pix_key,billing_contact,logo_path)')
     .eq('id',obligation_id).single();
   if(fetchError||!obligation)return respond('Cobrança não encontrada ou sem permissão',404);
   if(obligation.status!=='pending')return respond('Somente cobranças pendentes podem alterar o PDF',409);
@@ -64,11 +64,11 @@ Deno.serve(async(req:Request)=>{
   }
   if(obligation.amount===null||Number(obligation.amount)<0)return respond('Informe o valor dos honorários',422);
   const client=obligation.clients as unknown as {name:string;company:string;tax_id:string|null};
-  const office=obligation.organizations as unknown as {name:string;tax_id:string;pix_key:string;billing_contact:string};
+  const office=obligation.organizations as unknown as {name:string;tax_id:string;pix_key:string;billing_contact:string;logo_path:string|null};
   try{
     const admin=createClient(url,service,{auth:{persistSession:false}});
     const result=await ensureChargeDocument(admin,obligation.org_id,obligation.id,{
-      officeName:office.name,officeTaxId:office.tax_id,pixKey:office.pix_key,billingContact:office.billing_contact,
+      officeName:office.name,officeTaxId:office.tax_id,pixKey:office.pix_key,billingContact:office.billing_contact,logoPath:office.logo_path,
       clientName:client.name,company:client.company,clientTaxId:client.tax_id||'',
       service:obligation.title,amount:Number(obligation.amount),dueDate:obligation.due_date
     });
