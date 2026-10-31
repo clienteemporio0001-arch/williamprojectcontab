@@ -661,3 +661,25 @@
  .crm-metric-card>small{font-size:9px}
  .crm-finance-foot{gap:11px}
 }
+
+
+/* Identidade visual privada do escritório: upload compacto e responsivo. */
+.office-avatar{overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:#143535}
+.office-avatar img{width:100%;height:100%;object-fit:contain;border-radius:inherit}
+.office-logo-settings{display:flex;align-items:center;gap:17px;padding:19px 20px;border-bottom:1px solid #24384a}
+.office-logo-preview{width:104px;height:104px;flex:0 0 104px;display:flex;align-items:center;justify-content:center;border:1px dashed #3d655f;background:#0d2632;border-radius:13px;color:#58d9b8}
+.office-logo-preview img{max-width:96%;max-height:96%;object-fit:contain}
+.office-logo-copy{display:grid;justify-items:start;gap:8px;min-width:0}
+.office-logo-copy>strong{font-size:13px;color:#e6f4f0}
+.office-logo-copy>small{font-size:11px;color:#8da8ba;line-height:1.5}
+.office-logo-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
+.office-logo-actions .btn{font-size:11px;cursor:pointer}
+.office-upload{position:relative;cursor:pointer;overflow:hidden}
+.office-upload input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.office-upload-disabled{opacity:.5;pointer-events:none}
+@media(max-width:560px){
+ .office-logo-settings{align-items:flex-start;gap:12px;padding:14px;flex-wrap:wrap}
+ .office-logo-preview{width:76px;height:76px;flex-basis:76px}
+ .office-logo-copy{flex:1 1 190px}
+ .office-logo-copy>small{font-size:10px}
+}
