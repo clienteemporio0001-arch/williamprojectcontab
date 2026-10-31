@@ -32,7 +32,10 @@ export async function ensureChargeDocument(
   if(lookupError)throw new Error('Falha ao consultar o registro do PDF: '+lookupError.message);
   if(existing?.storage_path&&existing.storage_path!==canonical)
     throw new Error('O documento registrado tem caminho diferente do esperado. Revise antes de enviar.');
-  const stored=await download(db,canonical);
+  // Evita uma requisição Storage/404 desnecessária a cada primeira emissão.
+  // Se já houver registro, baixar o original. Se um arquivo órfão existir,
+  // o upload sem sobrescrita dará conflito e será reutilizado abaixo.
+  const stored=existing?await download(db,canonical):null;
   if(stored){
     if(!existing){
       const {error:registerError}=await db.from('billing_documents').upsert({
