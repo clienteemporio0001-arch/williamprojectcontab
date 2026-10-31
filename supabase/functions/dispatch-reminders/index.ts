@@ -17,7 +17,7 @@ type Obligation = {
 // Cada invocação envia um lote curto; o cron chama o worker repetidamente.
 // O limite é global e não permite que um escritório monopolize a rodada.
 const MAX_PER_RUN=12;
-const MAX_PER_ORG=4;
+const MAX_PER_ORG=6;
 const cors = { 'content-type':'application/json' };
 function fail(message:string,status=500){return new Response(JSON.stringify({error:message}),{status,headers:cors});}
 function localParts(date:Date,zone:string) {
@@ -145,7 +145,7 @@ Deno.serve(async(req:Request)=>{
     try{local=localParts(new Date(),org.timezone);}
     catch{stats.skipped++;continue;}
     // Agendamento: uma vez por dia, entre 9h e 10h da manhã de cada escritório.
-    if((local.hour<9||local.hour>=11)&&!dryRun&&!testNow)continue;
+    if((local.hour<9||local.hour>=12)&&!dryRun&&!testNow)continue;
     stats.organizations++;
 
     // O remetente é EXCLUSIVO deste escritório; nenhum token/número global
