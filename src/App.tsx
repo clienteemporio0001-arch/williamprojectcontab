@@ -4,7 +4,7 @@ import {
   BellRing, CalendarClock, Check, CheckCircle2, ChevronDown, CircleHelp,
   ClipboardList, Clock3, FileText, LayoutDashboard, LogOut, Menu, MessageCircle, Mail,
   MoreHorizontal, Plus, Repeat2, Search, Send, Settings2, ShieldCheck,
-  Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff, LockKeyhole
+  Sparkles, TrendingUp, Users, Wallet, X, AlertTriangle, ArrowUpRight, Building2, Eye, EyeOff, LockKeyhole, Trash2
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import MasterAdmin from './MasterAdmin';
@@ -68,6 +68,7 @@ export default function App() {
   const [filter,setFilter] = useState('all');
   const [clients,setClients] = useState<Client[]>(() => demo?readDemo('contabflow_clients_v1',demoClients):[]);
   const [obligations,setObligations] = useState<Obligation[]>(() => demo?readDemo('contabflow_obligations_v1',demoObligations):[]);
+  const [storedPdfIds,setStoredPdfIds] = useState<Set<string>>(()=>new Set());
   const [logs,setLogs] = useState<ReminderLog[]>([]);
   const [messageTemplate,setMessageTemplate] = useState(() => readDemo('contabflow_message_v1',DEFAULT_TEMPLATE));
   const [workspaceName,setWorkspaceName] = useState(() => readDemo('contabflow_name_v1','Meu escritório'));
@@ -106,7 +107,7 @@ export default function App() {
   const [saving,setSaving] = useState(false);
   const [toast,setToast] = useState('');
   const [error,setError] = useState('');
-  const [pdfPreview,setPdfPreview] = useState<{url:string;filename:string}|null>(null);
+  const [pdfPreview,setPdfPreview] = useState<{url:string;filename:string;obligationId:string}|null>(null);
 
   useEffect(()=>{
     if(!pdfPreview)return;
@@ -220,7 +221,7 @@ export default function App() {
     if(!supabase)return;
     if(!session){
       setWorkspace(null);setWorkspaceChecking(false);
-      setClients([]);setObligations([]);setLogs([]);setPasswordSetupOpen(false);
+      setClients([]);setObligations([]);setStoredPdfIds(new Set());setLogs([]);setPasswordSetupOpen(false);
       return;
     }
     const s=supabase;
@@ -287,13 +288,18 @@ export default function App() {
   async function loadCloud(id:string) {
     if(!supabase) return;
     setLoading(true);
-    const [c,o,l]=await Promise.all([
+    // Uma única consulta leve para identificar PDFs existentes. Não baixar cada arquivo.
+    const [c,o,l,d]=await Promise.all([
       supabase.from('clients').select('*').eq('org_id',id).order('name'),
       supabase.from('obligations').select('*').eq('org_id',id).order('due_date'),
-      supabase.from('reminder_logs').select('*').eq('org_id',id).order('created_at',{ascending:false}).limit(100)
+      supabase.from('reminder_logs').select('*').eq('org_id',id).order('created_at',{ascending:false}).limit(100),
+      supabase.from('billing_documents').select('obligation_id').eq('org_id',id)
     ]);
-    if(c.error || o.error || l.error) setError(String(c.error || o.error || l.error));
-    else {setClients(c.data as Client[]);setObligations(o.data as Obligation[]);setLogs(l.data as ReminderLog[]);}
+    if(c.error || o.error || l.error || d.error) setError(String(c.error || o.error || l.error || d.error));
+    else {
+      setClients(c.data as Client[]);setObligations(o.data as Obligation[]);setLogs(l.data as ReminderLog[]);
+      setStoredPdfIds(new Set((d.data||[]).map(row=>row.obligation_id as string)));
+    }
     setLoading(false);
   }
   function notify(msg:string) {setToast(msg);setError('');}
@@ -348,8 +354,15 @@ export default function App() {
     if(obligationDraft.document_url && !/^https:\/\//i.test(obligationDraft.document_url)){
       setError('O link do documento deve começar com https://');return;
     }
-    setSaving(true);setError('');
     const base=obligations.find(o=>o.id===obligationDraft.id);
+    if(!demo&&base&&storedPdfIds.has(base.id)&&(
+      base.client_id!==obligationDraft.client_id||base.title!==obligationDraft.title.trim()||
+      base.amount!==obligationDraft.amount||base.due_date!==obligationDraft.due_date
+    )){
+      setError('Já existe um PDF emitido. Para corrigir cliente, descrição, valor ou vencimento, use Excluir PDF na lista de cobranças antes de salvar.');
+      return;
+    }
+    setSaving(true);setError('');
     const payload:Obligation = {
       id:obligationDraft.id||crypto.randomUUID(),
       client_id:obligationDraft.client_id, title:obligationDraft.title.trim(),
@@ -364,7 +377,11 @@ export default function App() {
     if(demo)setObligations(prev=>obligationDraft.id?prev.map(x=>x.id===payload.id?payload:x):[payload,...prev]);
     else if(supabase && workspace){
       const {error:e}=await supabase.from('obligations').upsert({...payload,org_id:workspace.id});
-      if(e){setError(e.message);setSaving(false);return;}await loadCloud(workspace.id);
+      if(e){setError(e.message);setSaving(false);return;}
+      // O banco confirmou a gravação: atualizar somente a linha alterada,
+      // sem refazer consultas de clientes, cobranças, PDFs e histórico.
+      setObligations(prev=>obligationDraft.id
+        ?prev.map(o=>o.id===payload.id?payload:o):[payload,...prev]);
     }
     setSaving(false);closeModal();notify(obligationDraft.id?'Obrigação atualizada.':'Obrigação criada.');setPage('obligations');
   }
@@ -373,7 +390,8 @@ export default function App() {
     if(demo)setObligations(prev=>prev.map(x=>x.id===item.id?{...x,status:newStatus}:x));
     else if(supabase&&workspace){
       const {error:e}=await supabase.from('obligations').update({status:newStatus}).eq('id',item.id).eq('org_id',workspace.id);
-      if(e){setError(e.message);return;}await loadCloud(workspace.id);
+      if(e){setError(e.message);return;}
+      setObligations(prev=>prev.map(o=>o.id===item.id?{...o,status:newStatus}:o));
     }
     notify(newStatus==='paid'?'Marcado como pago.':'Marcado como pendente.');
   }
@@ -517,9 +535,35 @@ export default function App() {
       if(await pdf.slice(0,5).text()!=='%PDF-'){
         throw new Error('O servidor não retornou um PDF válido. Verifique a função generate-charge.');
       }
-      setPdfPreview({url:URL.createObjectURL(pdf),filename:'cobranca-'+item.due_date+'.pdf'});
+      if(!demo)setStoredPdfIds(prev=>new Set(prev).add(item.id));
+      setPdfPreview({url:URL.createObjectURL(pdf),filename:'cobranca-'+item.due_date+'.pdf',obligationId:item.id});
       notify('Cobrança gerada. Confira a prévia e baixe o PDF quando desejar.');
     }catch(err){setError('Não foi possível gerar a cobrança: '+String(err));}
+    finally{setLoading(false);}
+  }
+  async function deleteChargePdf(item:Obligation){
+    if(!supabase||!workspace||item.status!=='pending'||loading)return;
+    if(!window.confirm('Excluir o PDF desta cobrança? O arquivo será removido do Supabase Storage. Depois, edite a data ou valor e gere um novo PDF. Esta ação não é permitida se houver histórico de envio.'))return;
+    setLoading(true);setError('');
+    try{
+      const {data,error:e}=await supabase.functions.invoke('generate-charge',{
+        body:{obligation_id:item.id,action:'delete'}
+      });
+      if(e||data?.error){
+        let detail=typeof data?.error==='string'?data.error:e?.message||'Falha ao excluir PDF.';
+        const context=(e as {context?:unknown}|null)?.context;
+        if(context instanceof Response){
+          try{const result=await context.clone().json() as {error?:string};if(result.error)detail=result.error;}
+          catch{ /* resposta indisponível */ }
+        }
+        throw new Error(detail);
+      }
+      setStoredPdfIds(prev=>{const next=new Set(prev);next.delete(item.id);return next;});
+      if(pdfPreview?.obligationId===item.id)setPdfPreview(null);
+      notify(data?.deleted
+        ?'PDF excluído do armazenamento. Agora edite a data ou valor e clique em PDF para gerar o novo.'
+        :'Não havia PDF armazenado. Você já pode editar a cobrança e gerar o documento.');
+    }catch(err){setError('Exclusão não concluída: '+(err instanceof Error?err.message:String(err)));}
     finally{setLoading(false);}
   }
   function manualWhatsApp(item:Obligation){
@@ -725,7 +769,7 @@ export default function App() {
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
-            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title="Gerar e visualizar PDF" disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button><button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
+            <td><div className="actions"><button className="icon-button" title="Abrir WhatsApp manualmente" onClick={()=>manualWhatsApp(o)}><MessageCircle size={17}/></button><button className="btn tiny soft" title={storedPdfIds.has(o.id)?'Visualizar PDF emitido':'Gerar e visualizar PDF'} disabled={loading||o.status!=='pending'||o.amount===null} onClick={()=>void downloadCharge(o)}><FileText size={15}/> PDF</button>{storedPdfIds.has(o.id)&&o.status==='pending'&&<button className="icon-button" title="Excluir PDF não enviado e liberar correção" aria-label="Excluir PDF da cobrança" disabled={loading} onClick={()=>void deleteChargePdf(o)}><Trash2 size={16}/></button>}<button className="btn tiny soft" onClick={()=>showObligation(o)}>Editar</button><button className="icon-button" title={o.status==='paid'?'Reabrir':'Marcar como pago'} onClick={()=>void changeStatus(o)}>{o.status==='paid'?<Clock3 size={17}/>:<Check size={17}/>}</button></div></td></tr>)}
           {!visibleObligations.length&&<tr><td colSpan={5}><div className="empty"><ClipboardList/><strong>Nenhuma obrigação encontrada</strong><p>Adicione uma obrigação para começar.</p></div></td></tr>}</tbody></table></div></section>}
 
         {page==='automations'&&<div className="automation-layout"><section className="panel"><div className="panel-heading"><div><h2>Régua de cobranças</h2><p>Os dias são configurados individualmente em cada cobrança</p></div><span className="status neutral">Padrão inicial</span></div>
@@ -849,7 +893,7 @@ export default function App() {
         <form onSubmit={saveObligation} className="modal-body stack gap-lg"><label>Cliente *<select required value={obligationDraft.client_id} onChange={e=>setObligationDraft({...obligationDraft,client_id:e.target.value})}><option value="">Selecione um cliente</option>{clients.map(c=><option key={c.id} value={c.id}>{c.name} — {c.company||'PF'}</option>)}</select></label>
           <label>Descrição dos honorários *<input required value={obligationDraft.title} onChange={e=>setObligationDraft({...obligationDraft,title:e.target.value})} placeholder="Ex.: DAS — Simples Nacional"/></label>
           <div className="form-row"><label>Vencimento *<input type="date" required value={obligationDraft.due_date} onChange={e=>setObligationDraft({...obligationDraft,due_date:e.target.value})}/></label><label>Valor dos honorários *<input required type="number" min="0" step="0.01" value={obligationDraft.amount??''} onChange={e=>setObligationDraft({...obligationDraft,amount:e.target.value===''?null:Number(e.target.value)})} placeholder="0,00"/></label></div>
-          <p className="field-hint">O PDF será gerado automaticamente com este valor e vencimento. Ele não será um recibo de quitação.</p>
+          <p className="field-hint">O PDF será criado ao clicar em PDF na lista. Caso já tenha emitido um documento, exclua-o antes de mudar valor ou vencimento. Avisos com histórico de envio não podem ser excluídos.</p>
           <label className="check-card"><input type="checkbox" checked={obligationDraft.recurring} onChange={e=>setObligationDraft({...obligationDraft,recurring:e.target.checked})}/><span><strong>Repetir mensalmente</strong><small>O servidor gera uma nova competência a cada mês, sem duplicar o documento anterior. Links e valores devem ser atualizados quando necessário.</small></span></label>
           <div className="field"><label>Dias para enviar os lembretes por e-mail e WhatsApp</label>
             <p className="field-hint">A mesma régua vale para os canais autorizados e ativados no escritório. 0 = no dia. Cada canal registra seu próprio disparo.</p>
@@ -866,6 +910,7 @@ export default function App() {
           <div><p className="eyebrow">CONTABFLOW</p><h2 id="pdf-preview-title">Visualizar cobrança em PDF</h2>
           <p className="subtle small">Documento de cobrança; não comprova pagamento.</p></div>
           <div className="pdf-preview-actions">
+            {storedPdfIds.has(pdfPreview.obligationId)&&<button type="button" className="btn soft" disabled={loading} onClick={()=>{const item=obligations.find(o=>o.id===pdfPreview.obligationId);if(item)void deleteChargePdf(item);}}><Trash2 size={15}/> Excluir PDF</button>}
             <a className="btn primary" href={pdfPreview.url} download={pdfPreview.filename}><FileText size={16}/> Baixar PDF</a>
             <button type="button" className="icon-button" aria-label="Fechar prévia do PDF" onClick={()=>setPdfPreview(null)}><X size={21}/></button>
           </div>
