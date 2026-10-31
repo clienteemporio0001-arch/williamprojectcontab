@@ -46,7 +46,18 @@ export async function ensureChargeDocument(
     return {bytes:stored,created:false,path:canonical};
   }
   if(existing)throw new Error('PDF registrado não foi encontrado no Storage. Restaure o arquivo; não recrie um aviso diferente automaticamente.');
-  const bytes=await createChargePdf(info);
+  // Evitar download da logo para PDFs já emitidos (reutilizados no Storage).
+  // Cada escritório tem apenas um PNG privado de até 80 KiB.
+  let logoPng:Uint8Array|undefined;
+  if(info.logoPath===orgId+'/logo.png'){
+    const {data,error}=await db.storage.from('office-logos').download(info.logoPath);
+    if(!error&&data&&data.size<=81920){
+      logoPng=new Uint8Array(await data.arrayBuffer());
+    }else{
+      console.warn('Logo indisponível durante a primeira emissão; PDF seguirá com nome do escritório.');
+    }
+  }
+  const bytes=await createChargePdf({...info,logoPng});
   validPdf(bytes);
   const {error:uploadError}=await db.storage.from('billing-documents').upload(canonical,bytes,{
     contentType:'application/pdf',cacheControl:'0',upsert:false
