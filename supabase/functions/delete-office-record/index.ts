@@ -12,7 +12,7 @@ const reply=(data:unknown,status=200)=>new Response(JSON.stringify(data),{
   status,headers:{...cors,'Cache-Control':'no-store'}
 });
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_PATHS_PER_BATCH=500;
+const MAX_PATHS_PER_BATCH=150;
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
