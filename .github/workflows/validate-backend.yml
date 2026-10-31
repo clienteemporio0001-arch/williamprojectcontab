@@ -23,4 +23,4 @@ jobs:
       - name: Validar TypeScript das funções sem executar envios
         run: deno check supabase/functions/_shared/billing_pdf.ts supabase/functions/generate-charge/index.ts supabase/functions/dispatch-reminders/index.ts supabase/functions/whatsapp-connect/index.ts supabase/functions/whatsapp-webhook/index.ts supabase/functions/whatsapp-test-send/index.ts
       - name: Testar geração do PDF em Deno
-        run: deno test supabase/functions/_shared/billing_pdf_test.ts
+        run: deno test supabase/functions/_shared/billing_pdf_test.ts supabase/functions/_shared/charge_document_test.ts
