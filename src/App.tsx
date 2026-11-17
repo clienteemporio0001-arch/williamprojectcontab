@@ -14,6 +14,7 @@ import UpgradePlansModal,{type UpgradePlan} from './UpgradePlansModal';
 import WhatsAppSupport from './WhatsAppSupport';
 import WhatsAppConnectionPanel from './WhatsAppConnectionPanel';
 import {compressOfficeLogo} from './lib/office-logo';
+import {buildMonthlyRenewalPlan,type MonthlyRenewalPlan} from './lib/monthly-billing';
 import {DEFAULT_TRIAL,type TrialSettings,isWorkspaceAllowed,remainingTrialDays} from './lib/trial';
 import {leadWorkspaceName,normalizeBrazilPhone,signupErrorMessage} from './lib/registration';
 import {
@@ -80,6 +81,10 @@ export default function App() {
   const [obligations,setObligations] = useState<Obligation[]>(() => demo?readDemo('contabflow_obligations_v1',demoObligations):[]);
   const [storedPdfIds,setStoredPdfIds] = useState<Set<string>>(()=>new Set());
   const [logs,setLogs] = useState<ReminderLog[]>([]);
+  const [renewalOpen,setRenewalOpen] = useState(false);
+  const [renewalBusy,setRenewalBusy] = useState(false);
+  const [renewalPlan,setRenewalPlan] = useState<MonthlyRenewalPlan|null>(null);
+  const [renewalError,setRenewalError] = useState('');
   const [messageTemplate,setMessageTemplate] = useState(() => readDemo('contabflow_message_v1',DEFAULT_TEMPLATE));
   const [workspaceName,setWorkspaceName] = useState(() => readDemo('contabflow_name_v1','Meu escritório'));
   const [officeTaxId,setOfficeTaxId] = useState(() => readDemo('contabflow_tax_v2',''));
@@ -515,6 +520,93 @@ export default function App() {
     }
     setSaving(false);closeModal();notify(obligationDraft.id?'Obrigação atualizada.':'Obrigação criada.');setPage('obligations');
   }
+
+  // A prévia e a confirmação usam dados atuais do escritório, não a lista da tela.
+  // A leitura é paginada para não omitir cobranças em escritórios maiores.
+  async function loadRenewalSource(orgId:string):Promise<{charges:Obligation[];activeClients:Pick<Client,'id'|'active'>[]}> {
+    if(!supabase)throw new Error('Supabase não conectado.');
+    const charges:Obligation[]=[];
+    const activeClients:Pick<Client,'id'|'active'>[]=[];
+    const pageSize=500;
+    for(let page=0;;page++){
+      const {data,error:e}=await supabase.from('obligations')
+        .select('id,client_id,title,amount,due_date,status,document_url,recurring,series_id,due_day,reminder_offsets')
+        .eq('org_id',orgId).order('id').range(page*pageSize,(page+1)*pageSize-1);
+      if(e)throw new Error('Falha ao consultar cobranças: '+e.message);
+      charges.push(...((data||[]) as Obligation[]));
+      if(!data||data.length<pageSize)break;
+    }
+    for(let page=0;;page++){
+      const {data,error:e}=await supabase.from('clients')
+        .select('id,active').eq('org_id',orgId).order('id')
+        .range(page*pageSize,(page+1)*pageSize-1);
+      if(e)throw new Error('Falha ao consultar clientes: '+e.message);
+      activeClients.push(...(data||[]));
+      if(!data||data.length<pageSize)break;
+    }
+    return {charges,activeClients};
+  }
+  async function openMonthlyRenewal(){
+    if(renewalBusy||!workspace||!supabase||workspace.billing_status==='trialing')return;
+    setRenewalBusy(true);setRenewalError('');setRenewalPlan(null);
+    try{
+      const data=await loadRenewalSource(workspace.id);
+      const nextMonth=shiftMonth(dateISO().slice(0,7),1);
+      setRenewalPlan(buildMonthlyRenewalPlan(data.charges,data.activeClients,nextMonth));
+      setRenewalOpen(true);
+    }catch(e){setError('Não foi possível preparar a próxima competência: '+(e instanceof Error?e.message:String(e)));}
+    finally{setRenewalBusy(false);}
+  }
+  async function confirmMonthlyRenewal(){
+    if(renewalBusy||!workspace||!supabase||!renewalPlan||workspace.billing_status==='trialing')return;
+    setRenewalBusy(true);setRenewalError('');
+    const orgId=workspace.id;
+    try{
+      // Atualiza elegibilidade e verifica cobranças já cadastradas após a prévia.
+      const source=await loadRenewalSource(orgId);
+      const fresh=buildMonthlyRenewalPlan(source.charges,source.activeClients,renewalPlan.month);
+      if(fresh.candidates.length!==renewalPlan.candidates.length||
+         fresh.candidates.some((item,index)=>JSON.stringify(item)!==JSON.stringify(renewalPlan.candidates[index]))){
+        setRenewalPlan(fresh);
+        setRenewalError('Os dados mudaram desde a prévia. Revise os novos totais e confirme novamente.');
+        return;
+      }
+      if(!fresh.candidates.length){setRenewalError('Não há novas cobranças recorrentes para gerar neste mês.');return;}
+      let created=0;
+      let duplicates=0;
+      const errors:string[]=[];
+      // Inserções independentes: um conflito de unicidade não desfaz os outros registros.
+      // Máximo de quatro requisições simultâneas para não sobrecarregar o Supabase.
+      let cursor=0;
+      async function worker(){
+        while(cursor<fresh.candidates.length){
+          const index=cursor++;
+          const draft=fresh.candidates[index];
+          const {error:e}=await supabase!.from('obligations').insert({
+            ...draft,id:crypto.randomUUID(),org_id:orgId
+          });
+          if(!e)created++;
+          else if(e.code==='23505')duplicates++;
+          else if(errors.length<4)errors.push(e.message);
+        }
+      }
+      await Promise.all(Array.from({length:Math.min(4,fresh.candidates.length)},()=>worker()));
+      // Recarregue o painel apenas após as inserções; jamais reescreva cobranças antigas.
+      await loadCloud(orgId);
+      if(errors.length){
+        setRenewalError(`Criadas ${created} cobrança(s); ${duplicates} já existia(m). Algumas falharam: ${errors.join(' | ')}. Verifique a lista antes de tentar novamente.`);
+        setRenewalPlan(null);
+        return;
+      }
+      setRenewalOpen(false);setRenewalPlan(null);
+      notify(`Competência ${fresh.month.slice(5)}/${fresh.month.slice(0,4)}: ${created} cobrança(s) criada(s)${duplicates?', '+duplicates+' já existente(s)':''}. Nenhuma mensagem foi enviada.`);
+      setPage('obligations');
+    }catch(e){
+      setRenewalError('Não foi possível concluir a geração: '+(e instanceof Error?e.message:String(e))+' Verifique as cobranças antes de tentar novamente.');
+      setRenewalPlan(null);
+    }finally{setRenewalBusy(false);}
+  }
+
   async function changeStatus(item:Obligation) {
     const newStatus=item.status==='paid'?'pending':'paid';
     if(demo)setObligations(prev=>prev.map(x=>x.id===item.id?{...x,status:newStatus}:x));
@@ -1012,6 +1104,7 @@ export default function App() {
         {page==='obligations'&&<section className="panel table-panel"><div className="table-toolbar">
           <div className="searchbox"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar obrigação ou cliente…"/></div>
           <div className="select-wrap"><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">Todos os status</option><option value="soon">Próximos 7 dias</option><option value="late">Atrasados</option><option value="pending">Pendentes</option><option value="paid">Pagos</option><option value="cancelled">Cancelados</option></select><ChevronDown size={15}/></div>
+          <button type="button" className="btn soft" disabled={renewalBusy||loading||isTrial||demo} title={isTrial?'Indisponível durante o teste gratuito':demo?'Conecte o Supabase para gerar cobranças reais':'Criar as cobranças recorrentes do próximo mês'} onClick={()=>void openMonthlyRenewal()}><Repeat2 size={16}/>{renewalBusy?'Consultando…':'Gerar próximo mês'}</button>
         </div><div className="table-wrap"><table><thead><tr><th>DOCUMENTO / CLIENTE</th><th>VENCIMENTO</th><th>VALOR</th><th>STATUS</th><th>AÇÕES</th></tr></thead><tbody>
           {visibleObligations.map(o=><tr key={o.id}><td><div className="person"><span className="doc-icon"><FileText size={18}/></span><div><strong>{o.title} {o.recurring&&<Repeat2 size={13} className="inline-icon"/>}</strong><span>{clientById(o.client_id)?.company||clientById(o.client_id)?.name||'—'}</span></div></div></td>
             <td><div className="date-col"><strong>{formatDate(o.due_date)}</strong><small>{eventLabel(daysUntil(o.due_date))}</small></div></td><td className="money-cell">{money(o.amount)}</td><td><span className={'status '+statusFor(o).className}>{statusFor(o).text}</span></td>
@@ -1170,6 +1263,37 @@ export default function App() {
           <div className="client-history-pagination"><span>Página {historyPage+1} de {historyPages}</span>
             <div><button className="btn soft" disabled={historyPage===0} onClick={()=>setHistoryPage(p=>Math.max(0,p-1))}>Anterior</button>
             <button className="btn soft" disabled={historyPage+1>=historyPages} onClick={()=>setHistoryPage(p=>p+1)}>Próxima</button></div>
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {renewalOpen&&<div className="modal-overlay" onMouseDown={e=>{if(e.currentTarget===e.target&&!renewalBusy){setRenewalOpen(false);setRenewalPlan(null);setRenewalError('');}}}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="renewal-title">
+        <div className="modal-head">
+          <div><p className="eyebrow">COBRANÇAS RECORRENTES</p><h2 id="renewal-title">Gerar próximo mês</h2></div>
+          <button type="button" className="icon-button" aria-label="Fechar" disabled={renewalBusy} onClick={()=>{setRenewalOpen(false);setRenewalPlan(null);setRenewalError('');}}><X size={20}/></button>
+        </div>
+        <div className="modal-body stack gap-lg">
+          {renewalPlan&&<>
+            <p>Competência: <strong>{new Intl.DateTimeFormat('pt-BR',{month:'long',year:'numeric',timeZone:'UTC'}).format(new Date(renewalPlan.month+'-01T12:00:00Z'))}</strong></p>
+            <p><strong>{renewalPlan.candidates.length}</strong> nova(s) cobrança(s) recorrente(s) pronta(s) para criar. <strong>{renewalPlan.alreadyCreated}</strong> série(s) já possui(em) cobrança nesse mês.</p>
+            {(renewalPlan.inactiveClients>0||renewalPlan.cancelledSeries>0||renewalPlan.invalidSeries>0||renewalPlan.futureSeries>0)&&
+              <p className="subtle">Ignoradas: {renewalPlan.inactiveClients} de clientes inativos/ausentes; {renewalPlan.cancelledSeries} canceladas; {renewalPlan.invalidSeries} incompletas; {renewalPlan.futureSeries} com competência futura.</p>}
+            <div className="schedule-list renewal-list">
+              {renewalPlan.candidates.slice(0,12).map(item=><div className="schedule-row" key={item.series_id}>
+                <div className="schedule-content"><strong>{clients.find(c=>c.id===item.client_id)?.name||'Cliente cadastrado'}</strong><span>{item.title}</span></div>
+                <div className="schedule-date"><strong>{formatDate(item.due_date)}</strong><span>{money(item.amount)}</span></div>
+              </div>)}
+              {renewalPlan.candidates.length>12&&<p className="subtle">E mais {renewalPlan.candidates.length-12} cobranças.</p>}
+              {!renewalPlan.candidates.length&&<p className="subtle">Nenhuma nova cobrança elegível para esse período.</p>}
+            </div>
+            <p className="subtle">Somente novas cobranças pendentes serão criadas. Não altera pagamentos, clientes, PDFs existentes ou histórico e não envia mensagens.</p>
+          </>}
+          {renewalError&&<p role="alert" className="form-error">{renewalError}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn soft" disabled={renewalBusy} onClick={()=>{setRenewalOpen(false);setRenewalPlan(null);setRenewalError('');}}>Cancelar</button>
+            <button type="button" className="btn primary" disabled={renewalBusy||!renewalPlan?.candidates.length} onClick={()=>void confirmMonthlyRenewal()}>{renewalBusy?'Gerando…':'Confirmar geração'}</button>
           </div>
         </div>
       </div>
