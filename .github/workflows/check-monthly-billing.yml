@@ -1,0 +1,23 @@
+name: Validar geração mensal (sem deploy)
+on:
+  push:
+    branches:
+      - feat/contabflow-gerar-proximo-mes-20261117
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/test-monthly-billing.mjs'
+      - '.github/workflows/check-monthly-billing.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: node --experimental-strip-types scripts/test-monthly-billing.mjs
+      - run: npm run build
